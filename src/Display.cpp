@@ -17,17 +17,23 @@ void setupDisplay() {
   display.setTextColor(SSD1306_WHITE);
 }
 
-void showTemperature(double c) {
+void showStatusDisplay(double temp, const String& status) {
   display.clearDisplay();
+
+  display.setTextSize(3);  // Big temperature
   display.setCursor(0, 0);
-  display.print(c, 1);
-  display.println(" C");
+  if (isnan(temp)) {
+    display.setTextSize(1);
+    display.println("Temp error!");
+  } else {
+    display.print(temp, 1);
+    display.println(" C");
+  }
+
+  display.setTextSize(1);  // Smaller status line
+  display.setCursor(0, 50);
+  display.println(status);
+
   display.display();
 }
 
-void showError() {
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println("Thermocouple error!");
-  display.display();
-}

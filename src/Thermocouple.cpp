@@ -1,14 +1,19 @@
+#include <Adafruit_MAX31855.h>
 #include "Thermocouple.h"
+#include <SPI.h>
 
-// Pins
-static const int thermoCLK = 18;
-static const int thermoCS  = 5;
-static const int thermoDO  = 19;
+static const int thermoCS = 5;  // must be different from Ethernet CS (4)
 
-Adafruit_MAX31855 thermocouple(thermoCLK, thermoCS, thermoDO);
+// Use hardware SPI
+Adafruit_MAX31855 thermocouple(thermoCS);
 
 void setupThermocouple() {
-  if (isnan(thermocouple.readCelsius())) {
+  pinMode(thermoCS, OUTPUT);
+  digitalWrite(thermoCS, HIGH); // deselect
+  delay(10);
+
+  double temp = thermocouple.readCelsius(); // dummy read
+  if (isnan(temp)) {
     Serial.println("MAX31855 not found");
   }
 }

@@ -2,7 +2,7 @@
 #define DISPLAY_H
 
 void setupDisplay();
-void showTemperature(double c);
-void showError();
+void showStatusDisplay(double temp, const String& status);
+
 
 #endif
