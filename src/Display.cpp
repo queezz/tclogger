@@ -13,11 +13,10 @@ void setupDisplay() {
     while (true);
   }
   display.clearDisplay();
-  display.setTextSize(3);
   display.setTextColor(SSD1306_WHITE);
 }
 
-void showStatusDisplay(double temp, const String& status) {
+void showStatusDisplay(double temp, const String& status, const String& sdstatus) {
   display.clearDisplay();
 
   display.setTextSize(3);  // Big temperature
@@ -30,7 +29,10 @@ void showStatusDisplay(double temp, const String& status) {
     display.println(" C");
   }
 
-  display.setTextSize(1);  // Smaller status line
+  display.setTextSize(1);
+  display.setCursor(0, 30);
+  display.println(sdstatus);
+
   display.setCursor(0, 50);
   display.println(status);
 

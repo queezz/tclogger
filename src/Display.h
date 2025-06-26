@@ -2,7 +2,7 @@
 #define DISPLAY_H
 
 void setupDisplay();
-void showStatusDisplay(double temp, const String& status);
+void showStatusDisplay(double temp, const String& status, const String& sdstatus);
 
 
 #endif
