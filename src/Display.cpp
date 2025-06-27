@@ -14,6 +14,12 @@ void setupDisplay() {
   }
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
+  display.println("Initializing...");
+  display.display();
+}
+
+void showMessage(const String& message){
+  display.println(message);
 }
 
 void showStatusDisplay(double temp, const String& status, const String& sdstatus) {
@@ -30,10 +36,13 @@ void showStatusDisplay(double temp, const String& status, const String& sdstatus
   }
 
   display.setTextSize(1);
-  display.setCursor(0, 30);
+  display.setCursor(0, 25);
   display.println(sdstatus);
 
-  display.setCursor(0, 50);
+  display.setCursor(0, 40);
+  display.println("server status here");
+
+  display.setCursor(0, 55);
   display.println(status);
 
   display.display();

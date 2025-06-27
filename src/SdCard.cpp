@@ -6,9 +6,6 @@
 #include "SpiDevices.h"
 #include "TimeSync.h"
 
-time_t now = time(nullptr);
-struct tm* t = localtime(&now);
-
 
 static const int sdCS = CS_SD;
 static bool sdReady = false;
@@ -19,21 +16,28 @@ void setupSDCard() {
   if (!SD.begin(sdCS)) {
     Serial.println("card failed or not present.");
     sdReady = false;
+    return;
+  }
+  Serial.println("initialized successfully.");
+  sdReady = true;
+
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+
+  if (now < 1609459200) {  // Jan 1, 2021 — arbitrarily "sane" threshold
+    // Time not set — fallback name
+    strncpy(logFilename, "/log_fallback.csv", sizeof(logFilename));
   } else {
-    Serial.println("initialized successfully.");
-    sdReady = true;
+    strftime(logFilename, sizeof(logFilename), "/log_%Y%m%d_%H%M.csv", t);
   }
 
-  char filename[32];
-  strftime(filename, sizeof(filename), "/log_%Y%m%d_%H%M.csv", t);
-
-  File f = SD.open(filename, FILE_WRITE);
+  File f = SD.open(logFilename, FILE_WRITE);
   if (f) {
     f.println("Time,Temperature(C)");
     f.close();
+  }
 }
 
-}
 
 bool isSDReady() {
   return sdReady;

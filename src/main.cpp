@@ -5,6 +5,7 @@
 #include "SdCard.h"
 #include "SpiDevices.h"
 #include "TimeSync.h"
+// #include "WebServer.h"
 struct LogEntry {
   unsigned long timestamp;
   double temperature;
@@ -27,9 +28,9 @@ void setup() {
   struct tm t;
   t.tm_year = 2025 - 1900;
   t.tm_mon  = 6 - 1;     // June
-  t.tm_mday = 26;
-  t.tm_hour = 19;
-  t.tm_min  = 0;
+  t.tm_mday = 27;
+  t.tm_hour = 12;
+  t.tm_min  = 50;
   t.tm_sec  = 0;
   time_t now = mktime(&t);
   struct timeval tv = { .tv_sec = now };
@@ -39,10 +40,14 @@ void setup() {
 
   setupSPIChipSelects();
   setupDisplay();
+  showMessage(String("Setting LAN"));
   setupNetwork();
+  showMessage(String("Setting TC"));
   setupThermocouple();
   // setupTime();
+  showMessage(String("Setting SD card"));
   setupSDCard();
+  // setupWebServer();
 }
 
 void loop() {
@@ -69,6 +74,7 @@ void loop() {
   }
 
   showStatusDisplay(temperature, status, sdstatus);
+  // handleClient();
   delay(500);
 }
 
