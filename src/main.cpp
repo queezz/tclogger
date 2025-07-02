@@ -6,14 +6,7 @@
 #include "SpiDevices.h"
 #include "TimeSync.h"
 #include "WebServer.h"
-struct LogEntry {
-  unsigned long timestamp;
-  double temperature;
-};
 
-const size_t LOG_BUFFER_SIZE = 32;
-LogEntry logBuffer[LOG_BUFFER_SIZE];
-size_t logIndex = 0;
 
 unsigned long lastSample = 0;
 const unsigned long sampleInterval = 500;  // 0.5s
@@ -53,8 +46,11 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   double temperature = readTemperature();
-  // Serial.println(temperature);
   logTemperature(temperature);
+  if (millis() - lastFlush >= flushInterval) {
+    flushLogBufferToSD();
+    lastFlush = millis();
+  }
 
   String sdstatus;
 

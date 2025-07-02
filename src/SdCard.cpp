@@ -7,6 +7,7 @@
 #include "TimeSync.h"
 
 
+
 static const int sdCS = CS_SD;
 static bool sdReady = false;
 static char logFilename[32] = "/log.txt";
@@ -43,22 +44,44 @@ bool isSDReady() {
   return sdReady;
 }
 
+struct LogEntry {
+  char timestamp[32];
+  double temperature;
+};
+
+const size_t LOG_BUFFER_SIZE = 32;
+LogEntry logBuffer[LOG_BUFFER_SIZE];
+size_t logIndex = 0;
+
 void logTemperature(double temperature) {
-  if (!isSDReady()) return;
+  if (logIndex < LOG_BUFFER_SIZE) {
+    getTimestamp(logBuffer[logIndex].timestamp, sizeof(logBuffer[logIndex].timestamp));
+    logBuffer[logIndex].temperature = temperature;
+    logIndex++;
+  }
+}
+
+
+void flushLogBufferToSD() {
+  if (!isSDReady() || logIndex == 0) return;
 
   deselectAllSPI();
-  digitalWrite(CS_SD, LOW);  // Select SD
+  digitalWrite(CS_SD, LOW);
 
-  // File file = SD.open("/log.txt", FILE_WRITE);
   File file = SD.open(logFilename, FILE_WRITE);
   if (file) {
     file.seek(file.size());
-    // file.print(millis());
-    file.print(getTimestamp());
-    file.print(", ");
-    file.println(temperature, 2);
+
+    for (size_t i = 0; i < logIndex; ++i) {
+      file.print(logBuffer[i].timestamp);
+      file.print(", ");
+      file.println(logBuffer[i].temperature, 2);
+    }
+
     file.close();
   }
 
-  digitalWrite(CS_SD, HIGH);  // Deselect SD
+  digitalWrite(CS_SD, HIGH);
+
+  logIndex = 0;  // Clear buffer
 }

@@ -2,4 +2,4 @@
 #include <Arduino.h>
 
 void setupTime();
-String getTimestamp();
+void getTimestamp(char* out, size_t len);

@@ -60,10 +60,8 @@ void sendNTPPacket(IPAddress& address) {
   udp.endPacket();
 }
 
-String getTimestamp() {
+void getTimestamp(char* out, size_t len) {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
-  char buf[32];
-  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", t);
-  return String(buf);
+  strftime(out, len, "%Y-%m-%d %H:%M:%S", t);
 }
