@@ -39,8 +39,8 @@ void showStatusDisplay(double temp, const String& status, const String& sdstatus
   display.setCursor(0, 25);
   display.println(sdstatus);
 
-  display.setCursor(0, 40);
-  display.println("server status here");
+  // display.setCursor(0, 40);
+  // display.println("server status here");
 
   display.setCursor(0, 55);
   display.println(status);

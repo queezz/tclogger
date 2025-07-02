@@ -5,7 +5,7 @@
 #include "SdCard.h"
 #include "SpiDevices.h"
 #include "TimeSync.h"
-// #include "WebServer.h"
+#include "WebServer.h"
 struct LogEntry {
   unsigned long timestamp;
   double temperature;
@@ -47,7 +47,7 @@ void setup() {
   // setupTime();
   showMessage(String("Setting SD card"));
   setupSDCard();
-  // setupWebServer();
+  setupWebServer();
 }
 
 void loop() {
@@ -74,7 +74,7 @@ void loop() {
   }
 
   showStatusDisplay(temperature, status, sdstatus);
-  // handleClient();
+  handleClient();
   delay(500);
 }
 

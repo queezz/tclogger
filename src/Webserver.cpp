@@ -1,9 +1,21 @@
 #include <Arduino.h>
-#include <EthernetENC.h> 
+// #include <EthernetENC.h> 
+#include <Ethernet.h>
 #include "WebServer.h"
 #include "Thermocouple.h"
 
-EthernetServer server(80);
+// === Workaround: patch missing begin(uint16_t) ===
+class FixedEthernetServer : public EthernetServer {
+public:
+  using EthernetServer::EthernetServer;  // inherit constructors
+  using EthernetServer::begin;           // expose both begin() and begin(uint16_t)
+
+  void begin(uint16_t port) override {
+    EthernetServer::begin();  // call the no-argument version
+  }
+};
+
+FixedEthernetServer server(80);  // <- use the fixed version
 
 void setupWebServer() {
   server.begin();
