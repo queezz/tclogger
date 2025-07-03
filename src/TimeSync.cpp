@@ -29,6 +29,9 @@ void syncTimeFromRTC() {
   struct timeval now = { .tv_sec = epoch };
   settimeofday(&now, nullptr);
 
+  char buf[32];
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
+  Serial.println(buf);
   Serial.println("System time synced from RTC.");
 }
 
