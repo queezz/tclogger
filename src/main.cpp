@@ -17,19 +17,7 @@ const unsigned long flushInterval = 5000;  // 5s
 
 void setup() {
   Serial.begin(115200);
-  // Set to 2025-06-26 19:00:00 JST (UTC+9)
-  struct tm t;
-  t.tm_year = 2025 - 1900;
-  t.tm_mon  = 6 - 1;     // June
-  t.tm_mday = 27;
-  t.tm_hour = 12;
-  t.tm_min  = 50;
-  t.tm_sec  = 0;
-  time_t now = mktime(&t);
-  struct timeval tv = { .tv_sec = now };
-  settimeofday(&tv, nullptr);
-
-  Serial.println("Manual time set");
+  syncTimeFromRTC();
 
   setupSPIChipSelects();
   setupDisplay();

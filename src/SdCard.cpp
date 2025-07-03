@@ -6,8 +6,6 @@
 #include "SpiDevices.h"
 #include "TimeSync.h"
 
-
-
 static const int sdCS = CS_SD;
 static bool sdReady = false;
 static char logFilename[32] = "/log.txt";
@@ -37,6 +35,10 @@ void setupSDCard() {
     f.println("Time,Temperature(C)");
     f.close();
   }
+}
+
+const char* getLogFilename() {
+  return logFilename;
 }
 
 
