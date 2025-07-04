@@ -10,6 +10,7 @@ static const int sdCS = CS_SD;
 static bool sdReady = false;
 static char logFilename[32] = "/log.txt";
 
+//MARK: setup
 void setupSDCard() {
   Serial.print("Initializing SD card... ");
   if (!SD.begin(sdCS)) {
@@ -41,11 +42,11 @@ const char* getLogFilename() {
   return logFilename;
 }
 
-
 bool isSDReady() {
   return sdReady;
 }
 
+// MARK: Log
 struct LogEntry {
   char timestamp[32];
   double temperature;
@@ -62,8 +63,29 @@ void logTemperature(double temperature) {
     logIndex++;
   }
 }
+// MARK: new file
+void startNewLogFile() {
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+
+  if (now < 1609459200) {
+    strncpy(logFilename, "/log_manual.csv", sizeof(logFilename));
+  } else {
+    strftime(logFilename, sizeof(logFilename), "/log_%Y%m%d_%H%M.csv", t);
+  }
+
+  File f = SD.open(logFilename, FILE_WRITE);
+  if (f) {
+    f.println("Time,Temperature(C)");
+    f.close();
+    Serial.println("New file: "+String(logFilename));
+  }
+
+  logIndex = 0;  // clear buffer
+}
 
 
+// MARK: flush
 void flushLogBufferToSD() {
   if (!isSDReady() || logIndex == 0) return;
 
@@ -87,3 +109,4 @@ void flushLogBufferToSD() {
 
   logIndex = 0;  // Clear buffer
 }
+

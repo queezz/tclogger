@@ -1,6 +1,7 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
 #include "Display.h"
+#include "TimeSync.h"
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -39,8 +40,10 @@ void showStatusDisplay(double temp, const String& status, const String& sdstatus
   display.setCursor(0, 25);
   display.println(sdstatus);
 
-  // display.setCursor(0, 40);
-  // display.println("server status here");
+  char timestamp[20];
+  getTimestamp(timestamp, sizeof(timestamp));
+  display.setCursor(0, 40);
+  display.println(timestamp);
 
   display.setCursor(0, 55);
   display.println(status);

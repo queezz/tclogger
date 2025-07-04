@@ -6,15 +6,17 @@
 #include "SpiDevices.h"
 #include "TimeSync.h"
 #include "WebServer.h"
+#include "Sampling.h"
 
 
 unsigned long lastSample = 0;
-const unsigned long sampleInterval = 500;  // 0.5s
+String currentLogFile = "";  // for displaying
+
 
 unsigned long lastFlush = 0;
 const unsigned long flushInterval = 5000;  // 5s
 
-
+//MARK: Setup
 void setup() {
   Serial.begin(115200);
   syncTimeFromRTC();
@@ -31,13 +33,19 @@ void setup() {
   setupWebServer();
 }
 
+// MARK: Loop
 void loop() {
   unsigned long now = millis();
   double temperature = readTemperature();
-  logTemperature(temperature);
+
+  if (now - lastSample >= getSamplingInterval()) {
+    logTemperature(temperature);
+    lastSample = now;
+  }
+
   if (millis() - lastFlush >= flushInterval) {
     flushLogBufferToSD();
-    lastFlush = millis();
+    lastFlush = now;
   }
 
   String sdstatus;
@@ -59,6 +67,6 @@ void loop() {
 
   showStatusDisplay(temperature, status, sdstatus);
   handleClient();
-  delay(500);
+  delay(std::min(500ul,getSamplingInterval()));
 }
 
