@@ -5,13 +5,11 @@
 #include "SpiDevices.h"
 
 // Define software SPI pins (use unused GPIOs)
-constexpr int MAX_SOFT_SCK  = 14;
+constexpr int MAX_SOFT_SCK = 14;
 constexpr int MAX_SOFT_MISO = 12;
-constexpr int MAX_CS        = CS_MAX31855;
+constexpr int MAX_CS = CS_MAX31855;
 
-Adafruit_MAX31855 thermocouple(MAX_SOFT_SCK, MAX_CS, MAX_SOFT_MISO);  // SCK, CS, MISO
-
-
+Adafruit_MAX31855 thermocouple(MAX_SOFT_SCK, MAX_CS, MAX_SOFT_MISO); // SCK, CS, MISO
 
 // Use hardware SPI
 // Adafruit_MAX31855 thermocouple(CS_MAX31855);
@@ -28,22 +26,23 @@ Adafruit_MAX31855 thermocouple(MAX_SOFT_SCK, MAX_CS, MAX_SOFT_MISO);  // SCK, CS
 //   }
 // }
 
-
-void setupThermocouple() {
+void setupThermocouple()
+{
   pinMode(MAX_CS, OUTPUT);
   digitalWrite(MAX_CS, HIGH);
   delay(10);
 
   double temp = thermocouple.readCelsius();
-  if (isnan(temp)) {
+  if (isnan(temp))
+  {
     Serial.println("MAX31855 not found");
   }
 }
 
-
-double readTemperature() {
+double readTemperature()
+{
   deselectAllSPI();
-  digitalWrite(CS_MAX31855, LOW);  // Select MAX31855
+  digitalWrite(CS_MAX31855, LOW); // Select MAX31855
   double t = thermocouple.readCelsius();
   digitalWrite(CS_MAX31855, HIGH); // Deselect after read
   return t;

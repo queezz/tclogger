@@ -6,7 +6,7 @@ bool isSDReady();
 void flushLogBufferToSD();
 void readLogFile();
 void logTemperature(double temperature);
-const char* getLogFilename();
+const char *getLogFilename();
 void startNewLogFile();
 
 #endif

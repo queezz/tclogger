@@ -10,62 +10,80 @@
 #include "Sampling.h"
 
 // === Workaround: patch missing begin(uint16_t) ===
-class FixedEthernetServer : public EthernetServer {
+class FixedEthernetServer : public EthernetServer
+{
 public:
-  using EthernetServer::EthernetServer;  // inherit constructors
-  using EthernetServer::begin;           // expose both begin() and begin(uint16_t)
+  using EthernetServer::begin;          // expose both begin() and begin(uint16_t)
+  using EthernetServer::EthernetServer; // inherit constructors
 
-  void begin(uint16_t port) override {
-    EthernetServer::begin();  // call the no-argument version
+  void begin(uint16_t port) override
+  {
+    EthernetServer::begin(); // call the no-argument version
   }
 };
 
-FixedEthernetServer server(80);  // <- use the fixed version
+FixedEthernetServer server(80); // <- use the fixed version
 
-void setupWebServer() {
+void setupWebServer()
+{
   server.begin();
 }
 // MARK: Client
-void handleClient() {
+void handleClient()
+{
   EthernetClient client = server.available();
-  if (!client) return;
+  if (!client)
+    return;
 
-  while (!client.available()) delay(1);  // wait for data
+  while (!client.available())
+    delay(1); // wait for data
 
   String req = client.readStringUntil('\r');
   client.read(); // consume \n
 
-  if (req.indexOf("GET /preview") >= 0) {
+  if (req.indexOf("GET /preview") >= 0)
+  {
     servePreview(client);
     delay(1);
     client.stop();
     return;
   }
 
-  if (req.indexOf("GET /download?file=") >= 0) {
+  if (req.indexOf("GET /download?file=") >= 0)
+  {
     int idx = req.indexOf("file=") + 5;
     String filename = req.substring(idx);
     filename.trim();
 
     // Truncate at ".csv" to remove trailing HTTP
     int endIdx = filename.indexOf(".csv");
-    if (endIdx != -1) {
+    if (endIdx != -1)
+    {
       filename = filename.substring(0, endIdx + 4);
     }
 
     // Only allow safe filenames
-    if (filename.indexOf('/') >= 0 || !filename.endsWith(".csv")) {
+    if (filename.indexOf('/') >= 0 || !filename.endsWith(".csv"))
+    {
       client.println("HTTP/1.1 400 Bad Request\r\n\r\nInvalid filename.");
-    } else {
+    }
+    else
+    {
       serveFileDownload(client, filename);
     }
-    
-  if (req.indexOf("GET /sampling?interval=") >= 0) {
+    delay(1);
+    client.stop();
+    return;
+  }
+
+  if (req.indexOf("GET /sampling?interval=") >= 0)
+  {
     int idx = req.indexOf("interval=") + 9;
     String val = req.substring(idx);
     val.trim();
     float seconds = val.toFloat();
-    if (seconds >= 0.1 && seconds <= 30.0) {
+    if (seconds >= 0.1 && seconds <= 30.0)
+    {
       setSamplingInterval(seconds);
     }
     serveMainPage(client);
@@ -73,27 +91,23 @@ void handleClient() {
     return;
   }
 
-  if (req.startsWith("POST /newfile")) {
+  if (req.startsWith("POST /newfile"))
+  {
     startNewLogFile();
     serveMainPage(client);
     client.stop();
     return;
   }
 
-    delay(1);
-    client.stop();
-    return;
+  // Default: main page
+  serveMainPage(client);
+  delay(1);
+  client.stop();
 }
-
-// Default: main page
-serveMainPage(client);
-delay(1);
-client.stop();
-}
-
 
 // MARK: Main Page
-void serveMainPage(EthernetClient& client) {
+void serveMainPage(EthernetClient &client)
+{
   float temp = readTemperature();
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
@@ -101,7 +115,7 @@ void serveMainPage(EthernetClient& client) {
   client.println();
 
   client.println("<!DOCTYPE html><html><head><title>ESP32 Temp</title></head><body>");
-  client.print("<h1>Current Temperature: ");
+  client.print("<h1>");
   client.print(temp);
   client.println(" &deg;C</h1>");
   client.print("<p>Current Log File: <b>");
@@ -124,9 +138,9 @@ void serveMainPage(EthernetClient& client) {
   client.println("</body></html>");
 }
 
-
 // MARK: Preview
-void servePreview(EthernetClient& client) {
+void servePreview(EthernetClient &client)
+{
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -140,24 +154,28 @@ void servePreview(EthernetClient& client) {
   client.println("</body></html>");
 }
 
-
 // MARK: list Logs
-void listRecentLogs(EthernetClient& client) {
-  deselectAllSPI();             
-  digitalWrite(CS_SD, LOW);     
+void listRecentLogs(EthernetClient &client)
+{
+  deselectAllSPI();
+  digitalWrite(CS_SD, LOW);
 
   File root = SD.open("/");
-  if (!root || !root.isDirectory()) {
+  if (!root || !root.isDirectory())
+  {
     client.println("<li>Failed to open SD root.</li>");
     return;
   }
 
   std::vector<String> filenames;
   File entry = root.openNextFile();
-  while (entry) {
-    if (!entry.isDirectory()) {
+  while (entry)
+  {
+    if (!entry.isDirectory())
+    {
       String name = entry.name();
-      if (name.endsWith(".csv")) {
+      if (name.endsWith(".csv"))
+      {
         filenames.push_back(name);
       }
     }
@@ -170,7 +188,8 @@ void listRecentLogs(EthernetClient& client) {
 
   // size_t count = filenames.size();
   size_t count = std::min(filenames.size(), size_t(10));
-  for (size_t i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i)
+  {
     client.print("<li><a href=\"/download?file=");
     client.print(filenames[i]);
     client.print("\">");
@@ -179,14 +198,16 @@ void listRecentLogs(EthernetClient& client) {
   }
 }
 
-//MARK: Download
+// MARK: Download
 
-void serveFileDownload(EthernetClient& client, const String& filename) {
-  deselectAllSPI();                  // Ensure SD is only selected
-  digitalWrite(CS_SD, LOW);         // Select SD
+void serveFileDownload(EthernetClient &client, const String &filename)
+{
+  deselectAllSPI();         // Ensure SD is only selected
+  digitalWrite(CS_SD, LOW); // Select SD
 
   File file = SD.open("/" + filename);
-  if (!file || file.isDirectory()) {
+  if (!file || file.isDirectory())
+  {
     client.println("HTTP/1.1 404 Not Found\r\n\r\nFile not found.");
     digitalWrite(CS_SD, HIGH);
     return;
@@ -204,7 +225,8 @@ void serveFileDownload(EthernetClient& client, const String& filename) {
   // === Stream file content ===
   const size_t bufSize = 64;
   uint8_t buffer[bufSize];
-  while (file.available()) {
+  while (file.available())
+  {
     size_t len = file.read(buffer, bufSize);
     client.write(buffer, len);
   }

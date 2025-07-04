@@ -4,13 +4,16 @@
 
 RTC_DS3231 rtc;
 
-void syncTimeFromRTC() {
-  if (!rtc.begin()) {
+void syncTimeFromRTC()
+{
+  if (!rtc.begin())
+  {
     Serial.println("RTC not found!");
     return;
   }
 
-  if (rtc.lostPower()) {
+  if (rtc.lostPower())
+  {
     Serial.println("RTC lost power, time is not reliable!");
     return;
   }
@@ -19,14 +22,14 @@ void syncTimeFromRTC() {
 
   struct tm t;
   t.tm_year = dt.year() - 1900;
-  t.tm_mon  = dt.month() - 1;
+  t.tm_mon = dt.month() - 1;
   t.tm_mday = dt.day();
   t.tm_hour = dt.hour();
-  t.tm_min  = dt.minute();
-  t.tm_sec  = dt.second();
+  t.tm_min = dt.minute();
+  t.tm_sec = dt.second();
 
   time_t epoch = mktime(&t);
-  struct timeval now = { .tv_sec = epoch };
+  struct timeval now = {.tv_sec = epoch};
   settimeofday(&now, nullptr);
 
   char buf[32];
@@ -35,12 +38,12 @@ void syncTimeFromRTC() {
   Serial.println("System time synced from RTC.");
 }
 
-void getTimestamp(char* out, size_t len) {
+void getTimestamp(char *out, size_t len)
+{
   time_t now = time(nullptr);
-  struct tm* t = localtime(&now);
+  struct tm *t = localtime(&now);
   strftime(out, len, "%Y-%m-%d %H:%M:%S", t);
 }
-
 
 // MARK: Manual
 // void set_manual_time(){

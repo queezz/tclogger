@@ -8,16 +8,15 @@
 #include "WebServer.h"
 #include "Sampling.h"
 
-
 unsigned long lastSample = 0;
-String currentLogFile = "";  // for displaying
-
+String currentLogFile = ""; // for displaying
 
 unsigned long lastFlush = 0;
-const unsigned long flushInterval = 5000;  // 5s
+const unsigned long flushInterval = 10000; // 10s
 
-//MARK: Setup
-void setup() {
+// MARK: Setup
+void setup()
+{
   Serial.begin(115200);
   syncTimeFromRTC();
 
@@ -34,39 +33,47 @@ void setup() {
 }
 
 // MARK: Loop
-void loop() {
+void loop()
+{
   unsigned long now = millis();
   double temperature = readTemperature();
 
-  if (now - lastSample >= getSamplingInterval()) {
+  if (now - lastSample >= getSamplingInterval())
+  {
     logTemperature(temperature);
     lastSample = now;
   }
 
-  if (millis() - lastFlush >= flushInterval) {
+  if (millis() - lastFlush >= flushInterval)
+  {
     flushLogBufferToSD();
     lastFlush = now;
   }
 
   String sdstatus;
 
-  if (!isSDReady()){
+  if (!isSDReady())
+  {
     sdstatus = "SD not ready";
-  } else {
+  }
+  else
+  {
     sdstatus = "SD OK";
   }
 
   String status;
 
-  if (!isNetworkUp()) {
+  if (!isNetworkUp())
+  {
     status = "LAN error / no IP";
-  } else {
+  }
+  else
+  {
     IPAddress ip = getLocalIP();
     status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
   }
 
   showStatusDisplay(temperature, status, sdstatus);
   handleClient();
-  delay(std::min(500ul,getSamplingInterval()));
+  delay(std::min(500ul, getSamplingInterval()));
 }
-
