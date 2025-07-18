@@ -31,6 +31,7 @@ void setupWebServer()
 // MARK: Client
 void handleClient()
 {
+  deselectAllSPI();
   EthernetClient client = server.available();
   if (!client)
     return;
@@ -46,6 +47,7 @@ void handleClient()
     servePreview(client);
     delay(1);
     client.stop();
+    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -88,6 +90,7 @@ void handleClient()
     }
     serveMainPage(client);
     client.stop();
+    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -96,6 +99,7 @@ void handleClient()
     startNewLogFile();
     serveMainPage(client);
     client.stop();
+    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -103,6 +107,7 @@ void handleClient()
   serveMainPage(client);
   delay(1);
   client.stop();
+  digitalWrite(CS_W5500, HIGH);
 }
 
 // MARK: Main Page

@@ -22,12 +22,8 @@ void setup()
 
   setupSPIChipSelects();
   setupDisplay();
-  showMessage(String("Setting LAN"));
   setupNetwork();
-  showMessage(String("Setting TC"));
   setupThermocouple();
-  // setupTime();
-  showMessage(String("Setting SD card"));
   setupSDCard();
   setupWebServer();
 }
