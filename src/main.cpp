@@ -5,7 +5,8 @@
 #include "SdCard.h"
 #include "SpiDevices.h"
 #include "TimeSync.h"
-#include "WebServer.h"
+#include "secrets.h"
+#include "WebserverMy.h"
 #include "Sampling.h"
 
 unsigned long lastSample = 0;

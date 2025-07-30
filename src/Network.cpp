@@ -1,40 +1,38 @@
 #include "Network.h"
-#include <SPI.h>
-#include <Ethernet.h>
-#include "Pins.h"
-#include "SpiDevices.h"
-
-// MAC and static IP
-// static byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-static byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x01};
-
-static IPAddress staticIP(192, 168, 1, 177);
+#include "secrets.h"
 
 void setupNetwork()
 {
-  Ethernet.init(CS_W5500); // W5500 CS pin setup
-  pinMode(CS_W5500, OUTPUT);
-  digitalWrite(CS_W5500, HIGH); // deselect before init
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
 
-  Serial.println("Getting IP from the router");
-
-  if (Ethernet.begin(mac, 10000) == 0)
-  { // ✅ Try DHCP with 10s timeout
-    Serial.println("Ethernet DHCP failed, using static IP.");
-    Ethernet.begin(mac, staticIP); // fallback to static
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 30)
+  {
+    delay(500);
+    Serial.print(".");
+    retries++;
   }
 
-  delay(500);
-  Serial.print("IP Address: ");
-  Serial.println(Ethernet.localIP());
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("\nWiFi connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+  }
+  else
+  {
+    Serial.println("\nFailed to connect to WiFi");
+  }
 }
 
 IPAddress getLocalIP()
 {
-  return Ethernet.localIP();
+  return WiFi.localIP();
 }
 
 bool isNetworkUp()
 {
-  return Ethernet.linkStatus() == LinkON && Ethernet.localIP()[0] != 0;
+  return WiFi.status() == WL_CONNECTED;
 }
