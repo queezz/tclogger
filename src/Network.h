@@ -6,5 +6,6 @@
 void setupNetwork();
 IPAddress getLocalIP();
 bool isNetworkUp();
+void handleNetwork();
 
 #endif
