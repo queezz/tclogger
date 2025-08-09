@@ -69,6 +69,7 @@ void loop() {
   }
 
   showStatusDisplay(temperature, status, sdstatus);
+  handleNetwork();
   delay(500);
 }
 
