@@ -8,5 +8,6 @@ void readLogFile();
 void logTemperature(double temperature);
 const char *getLogFilename();
 void startNewLogFile();
+bool isLogging();
 
 #endif

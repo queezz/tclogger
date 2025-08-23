@@ -180,8 +180,9 @@
         try{ const r = await fetch(API.setInterval + '?ms=' + ms, { method:'POST' }); return r.ok }catch(e){ return false }
       }
 
-      async function sendStartLog(){
-        try{ const r = await fetch(API.startLog, { method:'POST' }); return r.ok }catch(e){return false}
+      async function sendStartLog(newFile=false){
+        const url = API.startLog + (newFile ? '?new=1' : '');
+        try{ const r = await fetch(url, { method:'POST' }); return await r.json(); }catch(e){return null}
       }
 
       // Status polling
@@ -260,10 +261,18 @@
       });
 
       el.startLogBtn.addEventListener('click', async ()=>{
+        if (!confirm('Start logging?')) return;
         el.startLogBtn.disabled = true;
-        const ok = await sendStartLog();
+        const res = await sendStartLog(false);
+        if (!res || res.ok === false){ el.statusText.textContent = 'Failed to start'; el.startLogBtn.disabled = false; setTimeout(()=>el.statusText.textContent = '',1600); return; }
+        if (res.running && res.log){
+          const yes = confirm(`Already logging:\n${res.log}\n\nStart a NEW file?`);
+          if (yes){ const r2 = await sendStartLog(true); el.statusText.textContent = (r2 && r2.ok) ? 'New file started' : 'Rotate failed'; }
+          else { el.statusText.textContent = 'Kept current file'; }
+        } else {
+          el.statusText.textContent = 'Logging started';
+        }
         el.startLogBtn.disabled = false;
-        el.statusText.textContent = ok? 'Logging started' : 'Failed to start';
         setTimeout(()=>el.statusText.textContent = '',1600);
       });
 

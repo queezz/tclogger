@@ -109,6 +109,12 @@ void startNewLogFile()
   logIndex = 0; // clear buffer
 }
 
+bool isLogging()
+{
+  // Consider logging active if filename is not the default placeholder
+  return strlen(logFilename) > 1 && strcmp(logFilename, "/log.txt") != 0;
+}
+
 // MARK: flush
 void flushLogBufferToSD()
 {

@@ -125,14 +125,57 @@ void handleClient()
   // --- API: /api/start_log ---
   if (req.indexOf("/api/start_log") >= 0)
   {
+    // check for ?new=1 in the request line
+    bool wantNew = false;
+    int idxNew = req.indexOf("new=");
+    if (idxNew >= 0)
+    {
+      String v = req.substring(idxNew + 4);
+      int sp = v.indexOf(' ');
+      if (sp >= 0) v = v.substring(0, sp);
+      v.trim();
+      if (v == "1" || v == "true") wantNew = true;
+    }
+
+    // If wantNew, rotate unconditionally
+    if (wantNew)
+    {
+      startNewLogFile();
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
+
+    // Not requesting new file: if already logging, return current path; otherwise start new
+    if (isLogging())
+    {
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
+
+    // not logging: start new
     startNewLogFile();
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/plain");
-    client.println("Connection: close");
-    client.println();
-    client.println("OK");
-    client.stop();
-    return;
+    {
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
   }
 
   // --- Preview ---
