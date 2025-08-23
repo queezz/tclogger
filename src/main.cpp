@@ -7,6 +7,7 @@
 #include "TimeSync.h"
 #include "WebServer.h"
 #include "Sampling.h"
+#include "rtc.h"
 
 unsigned long lastSample = 0;
 String currentLogFile = ""; // for displaying
@@ -18,7 +19,7 @@ const unsigned long flushInterval = 10000; // 10s
 void setup()
 {
   Serial.begin(115200);
-  syncTimeFromRTC();
+  rtc_setup();
 
   setupSPIChipSelects();
   setupDisplay();
@@ -61,7 +62,7 @@ void loop()
 
   if (!isNetworkUp())
   {
-    status = "LAN error / no IP";
+    status = "WiFi error / no IP";
   }
   else
   {

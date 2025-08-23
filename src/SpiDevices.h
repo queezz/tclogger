@@ -7,7 +7,6 @@
 inline void deselectAllSPI()
 {
   digitalWrite(CS_SD, HIGH);
-  digitalWrite(CS_W5500, HIGH);
   // digitalWrite(CS_MAX31855, HIGH); // On another SPI
 }
 
@@ -15,7 +14,6 @@ inline void setupSPIChipSelects()
 {
   pinMode(CS_SD, OUTPUT);
   pinMode(CS_MAX31855, OUTPUT);
-  pinMode(CS_W5500, OUTPUT);
   deselectAllSPI(); // Ensure all are HIGH by default
 }
 

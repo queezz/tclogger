@@ -1,10 +1,10 @@
 #pragma once
-#include <Ethernet.h>
+#include <WiFi.h>
 
 void setupWebServer();
 void handleClient();
 
-void serveMainPage(EthernetClient &client);
-void servePreview(EthernetClient &client);
-void listRecentLogs(EthernetClient &client);
-void serveFileDownload(EthernetClient &client, const String &filename);
+void serveMainPage(WiFiClient &client);
+void servePreview(WiFiClient &client);
+void listRecentLogs(WiFiClient &client);
+void serveFileDownload(WiFiClient &client, const String &filename);

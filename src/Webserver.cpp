@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <Ethernet.h>
+#include <WiFi.h>
 #include <SD.h>
 #include <vector>
 #include <algorithm>
@@ -9,20 +9,7 @@
 #include "SpiDevices.h"
 #include "Sampling.h"
 
-// === Workaround: patch missing begin(uint16_t) ===
-class FixedEthernetServer : public EthernetServer
-{
-public:
-  using EthernetServer::begin;          // expose both begin() and begin(uint16_t)
-  using EthernetServer::EthernetServer; // inherit constructors
-
-  void begin(uint16_t port) override
-  {
-    EthernetServer::begin(); // call the no-argument version
-  }
-};
-
-FixedEthernetServer server(80); // <- use the fixed version
+WiFiServer server(80);
 
 void setupWebServer()
 {
@@ -32,7 +19,7 @@ void setupWebServer()
 void handleClient()
 {
   deselectAllSPI();
-  EthernetClient client = server.available();
+  WiFiClient client = server.available();
   if (!client)
     return;
 
@@ -47,7 +34,6 @@ void handleClient()
     servePreview(client);
     delay(1);
     client.stop();
-    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -90,7 +76,6 @@ void handleClient()
     }
     serveMainPage(client);
     client.stop();
-    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -99,7 +84,6 @@ void handleClient()
     startNewLogFile();
     serveMainPage(client);
     client.stop();
-    digitalWrite(CS_W5500, HIGH);
     return;
   }
 
@@ -107,11 +91,10 @@ void handleClient()
   serveMainPage(client);
   delay(1);
   client.stop();
-  digitalWrite(CS_W5500, HIGH);
 }
 
 // MARK: Main Page
-void serveMainPage(EthernetClient &client)
+void serveMainPage(WiFiClient &client)
 {
   float temp = readTemperature();
   client.println("HTTP/1.1 200 OK");
@@ -144,7 +127,7 @@ void serveMainPage(EthernetClient &client)
 }
 
 // MARK: Preview
-void servePreview(EthernetClient &client)
+void servePreview(WiFiClient &client)
 {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
@@ -160,7 +143,7 @@ void servePreview(EthernetClient &client)
 }
 
 // MARK: list Logs
-void listRecentLogs(EthernetClient &client)
+void listRecentLogs(WiFiClient &client)
 {
   deselectAllSPI();
   digitalWrite(CS_SD, LOW);
@@ -205,7 +188,7 @@ void listRecentLogs(EthernetClient &client)
 
 // MARK: Download
 
-void serveFileDownload(EthernetClient &client, const String &filename)
+void serveFileDownload(WiFiClient &client, const String &filename)
 {
   deselectAllSPI();         // Ensure SD is only selected
   digitalWrite(CS_SD, LOW); // Select SD
