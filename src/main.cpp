@@ -26,10 +26,10 @@ void setup()
 
   setupSPIChipSelects();
   setupDisplay();
-  setupNetwork();
+  Network::begin(12000);
   setupThermocouple();
   setupSDCard();
-  setupWebServer();
+  Webserver_begin();
   // Initialize I2C mutex and Wire
   I2C_MTX = xSemaphoreCreateMutex();
   Wire.begin();
@@ -72,13 +72,13 @@ void loop()
 
   String status;
 
-  if (!isNetworkUp())
+  if (!Network::isConnected())
   {
     status = "WiFi error / no IP";
   }
   else
   {
-    IPAddress ip = getLocalIP();
+    IPAddress ip = Network::ip();
     status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
   }
 

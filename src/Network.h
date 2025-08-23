@@ -1,11 +1,13 @@
-#ifndef NETWORK_H
-#define NETWORK_H
-
+#pragma once
 #include <Arduino.h>
+#include <WiFi.h>
 
-void setupNetwork();
-IPAddress getLocalIP();
-bool isNetworkUp();
-void handleNetwork();
+namespace Network {
+enum class Mode { None, STA, AP };
 
-#endif
+void begin(uint32_t connect_timeout_ms = 12000);
+bool isConnected();
+Mode mode();
+IPAddress ip();
+String modeName();
+}

@@ -6,6 +6,7 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include "WebServer.h"
+#include "Network.h"
 #include "Thermocouple.h"
 #include "SdCard.h"
 #include "SpiDevices.h"
@@ -298,6 +299,12 @@ void handleClient()
   serveMainPage(client);
   delay(1);
   client.stop();
+}
+
+void Webserver_begin()
+{
+  setupWebServer();
+  Serial.printf("[WEB] %s server on http://%s/\n", Network::modeName().c_str(), Network::ip().toString().c_str());
 }
 
 // MARK: Main Page
