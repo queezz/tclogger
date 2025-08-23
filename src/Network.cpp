@@ -34,4 +34,4 @@ IPAddress getLocalIP()
 bool isNetworkUp()
 {
   return WiFi.status() == WL_CONNECTED;
-}
+

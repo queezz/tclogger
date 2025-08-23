@@ -81,4 +81,5 @@ void loop()
   showStatusDisplay(displayVal, status, sdstatus);
   handleClient();
   delay(std::min(500ul, getSamplingInterval()));
+
 }
