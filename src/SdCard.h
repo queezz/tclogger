@@ -3,7 +3,10 @@
 
 void setupSDCard();
 bool isSDReady();
-void logTemperature(double temperature);
+void flushLogBufferToSD();
 void readLogFile();
+void logTemperature(double temperature);
+const char *getLogFilename();
+void startNewLogFile();
 
 #endif

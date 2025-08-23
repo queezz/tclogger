@@ -3,6 +3,6 @@
 
 void setupDisplay();
 void showStatusDisplay(double temp, const String& status, const String& sdstatus);
-
+void showMessage(const String& message);
 
 #endif

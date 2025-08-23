@@ -1,5 +1,4 @@
 #pragma once
-#include <Arduino.h>
 
-void setupTime();
-String getTimestamp();
+void syncTimeFromRTC();
+void getTimestamp(char *out, size_t len);
