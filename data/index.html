@@ -7,39 +7,71 @@
     <style>
       :root{
         --bg:#0f1720; --card:#0b1220; --text:#e6eef6; --muted:#9fb0c8; --accent:#4fd1c5;
+        --ring: rgba(79,209,197,0.35);
       }
       @media (prefers-color-scheme: light){
-        :root{ --bg:#f6f9fc; --card:#ffffff; --text:#06202b; --muted:#456275; --accent:#0ea5a4; }
+        :root{ --bg:#f6f9fc; --card:#ffffff; --text:#06202b; --muted:#456275; --accent:#0ea5a4; --ring: rgba(14,165,164,0.25); }
       }
       html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased}
       .app{max-width:900px;margin:0 auto;padding:18px;box-sizing:border-box}
       header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
       h1{font-size:1rem;margin:0;color:var(--accent)}
       .controls{display:flex;gap:8px;flex-wrap:wrap}
-      .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+      .card{background:var(--card);border-radius:14px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
       .main{display:grid;grid-template-columns:1fr;gap:12px}
-      .temp-display{display:flex;align-items:center;justify-content:space-between;padding:18px;border-radius:10px}
-      .temp-left{display:flex;flex-direction:column}
-      .temp-value{font-weight:700;font-size:3.6rem;line-height:1}
-      .temp-units{font-size:1.1rem;opacity:.9}
-      .small{color:var(--muted);font-size:.95rem}
-      .actions{display:flex;gap:8px;align-items:center}
-      button, select{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:10px 12px;border-radius:8px;font-size:0.95rem}
-      button.primary{background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0}
+      .temp-display{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;padding:18px;border-radius:12px}
+      .temp-left{display:flex;flex-direction:column;gap:6px;min-width:0}
+      .temp-value{font-weight:800;font-size:3.8rem;line-height:1}
+      .temp-meta{display:flex;flex-direction:column;gap:2px}
+      .log-line{color:var(--muted);font-size:.95rem;word-break:break-all;overflow-wrap:anywhere}
+      .interval-line{color:var(--muted);font-size:.95rem}
+      .actions{display:grid;grid-template-columns:auto auto;gap:8px;align-items:center}
+      .actions .row{display:flex;gap:8px;align-items:center}
+      .actions .primary{grid-column:1 / -1}
+      button, select{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text);padding:10px 12px;border-radius:10px;font-size:0.95rem}
+      button:focus-visible, select:focus-visible{outline:none; box-shadow:0 0 0 3px var(--ring)}
+      button.primary{background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0;font-weight:600}
       .muted{opacity:.85}
-      .row{display:flex;gap:8px;align-items:center}
-      .flex{flex:1}
-      #chart{width:100%;height:160px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);display:block}
+      #chart{width:100%;height:180px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);display:block}
       footer{margin-top:12px;color:var(--muted);font-size:.85rem;text-align:center}
-      /* Mobile tweaks */
-      @media (max-width:520px){
-        .temp-value{font-size:2.6rem}
-        header{gap:8px}
-        .card{padding:12px}
-      }
       .toggle{display:inline-flex;align-items:center;gap:8px}
       .link{color:var(--accent);text-decoration:none}
       .hidden{display:none}
+      select {
+        background: var(--card);
+        color: var(--text);
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+
+      select option {
+        background: var(--card);
+        color: var(--text);
+      }
+
+      button:hover:not(.primary),
+      button:focus-visible:not(.primary) {
+        background: rgba(255,255,255,0.06);
+        border-color: var(--accent);
+        cursor: pointer;
+      }
+
+      button.primary:hover,
+      button.primary:focus-visible {
+        filter: brightness(1.2);
+        box-shadow: 0 0 6px var(--ring);
+        cursor: pointer;
+      }
+
+      /* Mobile tweaks */
+      @media (max-width:540px){
+        .temp-display{grid-template-columns:1fr;align-items:start}
+        .temp-value{font-size:3rem}
+        .actions{grid-template-columns:1fr}
+        .actions .row{width:100%}
+        .actions select, .actions button{width:100%}
+        .actions .primary{width:100%}
+        .card{padding:12px}
+      }
     </style>
   </head>
   <body>
@@ -47,9 +79,9 @@
       <header>
         <h1>ESP32 Temp Logger</h1>
         <div class="controls">
-          <label class="toggle small" title="Toggle dark/light mode">
+          <label class="toggle" title="Toggle dark/light mode">
             <input id="themeToggle" type="checkbox" aria-label="Toggle theme" />
-            <span class="small">Dark / Light</span>
+            <span class="muted">Dark / Light</span>
           </label>
         </div>
       </header>
@@ -58,7 +90,10 @@
         <section class="card temp-display" aria-live="polite">
           <div class="temp-left">
             <div class="temp-value" id="tempValue">--.-</div>
-            <div class="temp-units small" id="tempMeta">-- &nbsp; • &nbsp; interval: --s</div>
+            <div class="temp-meta">
+              <div id="logLine" class="log-line">log: —</div>
+              <div id="intervalLine" class="interval-line">interval: —</div>
+            </div>
           </div>
           <div class="actions">
             <div class="row">
@@ -72,17 +107,15 @@
               </select>
               <button id="setIntervalBtn">Set</button>
             </div>
-            <div class="row">
-              <button id="startLogBtn" class="primary">Start Log</button>
-            </div>
+            <button id="startLogBtn" class="primary">Start Log</button>
           </div>
         </section>
 
         <section class="card" id="controlsCard">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-            <div class="small muted">Status: <span id="statusText">Connecting…</span></div>
+            <div class="muted">Status: <span id="statusText">Connecting…</span></div>
             <div style="display:flex;gap:8px;align-items:center">
-              <label class="toggle small"><input id="plotToggle" type="checkbox" /> <span>Show plot</span></label>
+              <label class="toggle"><input id="plotToggle" type="checkbox" /> <span>Show plot</span></label>
               <a id="previewLink" class="link" href="#" target="_blank">Download CSV</a>
             </div>
           </div>
@@ -102,17 +135,18 @@
     <script>
       // --- API endpoints (firmware provides these) ---
       const API = {
-        status: '/api/status',        // { temp, log, interval_ms }
-        temp: '/api/temp',            // { t, ts }
-        setInterval: '/api/set_interval', // POST ?ms=NNN
-        startLog: '/api/start_log',   // POST
+        status: '/api/status',
+        temp: '/api/temp',
+        setInterval: '/api/set_interval',
+        startLog: '/api/start_log',
         preview: '/preview'
       };
 
       // UI elements
       const el = {
         tempValue: document.getElementById('tempValue'),
-        tempMeta: document.getElementById('tempMeta'),
+        logLine: document.getElementById('logLine'),
+        intervalLine: document.getElementById('intervalLine'),
         statusText: document.getElementById('statusText'),
         intervalSelect: document.getElementById('intervalSelect'),
         setIntervalBtn: document.getElementById('setIntervalBtn'),
@@ -137,7 +171,6 @@
       }
       el.themeToggle.addEventListener('change', e=> applyTheme(e.target.checked));
 
-      // Fetch helpers
       async function fetchJson(path, opts){
         try{ const r = await fetch(path, opts); if(!r.ok) throw new Error('http '+r.status); const t = await r.json(); return t }catch(e){ console.warn('fetch error',path,e); return null }
       }
@@ -153,7 +186,7 @@
 
       // Status polling
       async function pollStatus(){
-        if(document.hidden) return; // pause when page hidden
+        if(document.hidden) return;
         const data = await fetchJson(API.status);
         if(!data){ el.statusText.textContent = 'Offline'; return }
         el.statusText.textContent = 'OK';
@@ -162,8 +195,9 @@
         }
         const intervalSec = (data.interval_ms ? data.interval_ms/1000 : statusPollMs/1000);
         const logName = data.log || '-';
-        el.tempMeta.textContent = 'log: ' + logName + ' • interval: ' + Number(intervalSec).toFixed(3) + 's';
-        // adapt poll rates (status ~ interval, temp ~ 1s by default)
+        el.logLine.textContent = 'log: ' + logName;
+        el.intervalLine.textContent = 'interval: ' + Number(intervalSec).toFixed(3) + 's';
+
         const newStatusMs = Math.max(500, Math.min(60000, (data.interval_ms || statusPollMs)));
         if(Math.abs(newStatusMs - statusPollMs) > 20){ statusPollMs = newStatusMs; restartStatusPoll(); }
         if(plotOn && visible) drawPlot();
@@ -190,9 +224,7 @@
         const c = el.chartCanvas; const w = c.clientWidth; const h = c.clientHeight;
         const dpr = window.devicePixelRatio || 1; c.width = Math.max(1, Math.floor(w * dpr)); c.height = Math.max(1, Math.floor(h * dpr));
         const ctx = c.getContext('2d'); ctx.scale(dpr,dpr);
-        // background
         ctx.clearRect(0,0,w,h);
-        // prepare data
         if(samples.length<2) return;
         const values = samples.map(s=>s.v);
         const min = Math.min(...values); const max = Math.max(...values); const range = Math.max(0.1, max-min);
@@ -202,12 +234,10 @@
           if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
         }
         ctx.stroke();
-        // last value marker
         ctx.fillStyle = 'rgba(79,209,197,0.95)'; const last = values[values.length-1]; const lx = w-6; const ly = h - ((last-min)/range)*(h-8)-4;
         ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2); ctx.fill();
       }
 
-      // Visibility and plot toggle handling
       document.addEventListener('visibilitychange', ()=>{
         visible = !document.hidden;
         if(visible){ if(!statusTimer) startStatusPoll(); if(plotOn && !tempTimer) startTempPoll(); if(plotOn) drawPlot(); }
@@ -220,7 +250,6 @@
         if(plotOn && visible){ startTempPoll(); drawPlot(); } else { stopTempPoll(); }
       });
 
-      // Controls
       el.setIntervalBtn.addEventListener('click', async ()=>{
         const v = Number(el.intervalSelect.value);
         el.setIntervalBtn.disabled = true;
@@ -242,16 +271,11 @@
         ev.preventDefault(); window.open(API.preview, '_blank');
       });
 
-      // Boot
       function init(){
-        // set default interval select to common value
         el.intervalSelect.value = '5';
-        // try initial poll immediately
         pollStatus(); startStatusPoll();
-        // keep canvas size responsive
         window.addEventListener('resize', ()=>{ if(plotOn) drawPlot(); });
       }
-
       init();
     </script>
   </body>
