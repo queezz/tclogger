@@ -34,10 +34,15 @@ void loop()
 {
   unsigned long now = millis();
   double temperature = readTemperature();
+  // accumulate for rolling average regardless of display/log cadence
+  accumulateRolling(temperature);
 
   if (now - lastSample >= getSamplingInterval())
   {
-    logTemperature(temperature);
+    // use averaged value over the sampling interval
+    double avg = finalizeIntervalAverage();
+    double toLog = isnan(avg) ? temperature : avg;
+    logTemperature(toLog);
     lastSample = now;
   }
 
@@ -70,7 +75,10 @@ void loop()
     status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
   }
 
-  showStatusDisplay(temperature, status, sdstatus);
+  // For OLED, show smoothed value if available
+  double displayVal = getCurrentAverage();
+  if (isnan(displayVal)) displayVal = temperature;
+  showStatusDisplay(displayVal, status, sdstatus);
   handleClient();
   delay(std::min(500ul, getSamplingInterval()));
 }

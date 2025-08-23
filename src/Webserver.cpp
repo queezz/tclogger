@@ -34,6 +34,8 @@ void handleClient()
   while (!client.available())
     delay(1); // wait for data
 
+  client.setNoDelay(true);
+
   String req = client.readStringUntil('\r');
   client.read(); // consume \n
   // --- API: /api/status ---
@@ -62,6 +64,25 @@ void handleClient()
     String j = "{";
     j += "\"t\":" + String(temp, 2) + ",";
     j += "\"ts\":" + String(ts);
+    j += "}";
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+    client.println(j);
+    client.stop();
+    return;
+  }
+
+  // --- API: /api/health ---
+  if (req.indexOf("GET /api/health") >= 0)
+  {
+    long rssi = WiFi.RSSI();
+    IPAddress ip = WiFi.localIP();
+    String j = "{";
+    j += "\"rssi\":" + String(rssi) + ",";
+    j += "\"ip\":\"" + String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]) + "\",";
+    j += "\"uptime_ms\":" + String(millis());
     j += "}";
     client.println("HTTP/1.1 200 OK");
     client.println("Content-Type: application/json");
