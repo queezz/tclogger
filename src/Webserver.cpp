@@ -3,6 +3,8 @@
 #include <SD.h>
 #include <vector>
 #include <algorithm>
+#include <FS.h>
+#include <LittleFS.h>
 #include "WebServer.h"
 #include "Thermocouple.h"
 #include "SdCard.h"
@@ -13,6 +15,12 @@ WiFiServer server(80);
 
 void setupWebServer()
 {
+  // Initialize LittleFS (for serving data/index.html)
+  if (!LittleFS.begin(true))
+  {
+    Serial.println("LittleFS mount failed");
+  }
+
   server.begin();
 }
 // MARK: Client
@@ -28,7 +36,85 @@ void handleClient()
 
   String req = client.readStringUntil('\r');
   client.read(); // consume \n
+  // --- API: /api/status ---
+  if (req.indexOf("GET /api/status") >= 0)
+  {
+    float temp = readTemperature();
+    String j = "{";
+    j += "\"temp\":" + String(temp, 2) + ",";
+    j += "\"log\":\"" + String(getLogFilename()) + "\",";
+    j += "\"interval_ms\":" + String(getSamplingInterval());
+    j += "}";
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+    client.println(j);
+    client.stop();
+    return;
+  }
 
+  // --- API: /api/temp ---
+  if (req.indexOf("GET /api/temp") >= 0)
+  {
+    float temp = readTemperature();
+    unsigned long ts = millis();
+    String j = "{";
+    j += "\"t\":" + String(temp, 2) + ",";
+    j += "\"ts\":" + String(ts);
+    j += "}";
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+    client.println(j);
+    client.stop();
+    return;
+  }
+
+  // --- API: /api/set_interval?ms=NNN  (POST expected, but support GET-like query too) ---
+  if (req.indexOf("/api/set_interval") >= 0)
+  {
+    // Look for ms= in the request line (handles query param)
+    int idx = req.indexOf("ms=");
+    if (idx >= 0)
+    {
+      idx += 3;
+      String val = req.substring(idx);
+      // strip trailing HTTP (space)
+      int sp = val.indexOf(' ');
+      if (sp >= 0) val = val.substring(0, sp);
+      val.trim();
+      unsigned long ms = val.toInt();
+      if (ms > 0)
+      {
+        // convert ms to seconds for existing setter
+        setSamplingInterval((float)ms / 1000.0f);
+      }
+    }
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/plain");
+    client.println("Connection: close");
+    client.println();
+    client.println("OK");
+    client.stop();
+    return;
+  }
+
+  // --- API: /api/start_log ---
+  if (req.indexOf("/api/start_log") >= 0)
+  {
+    startNewLogFile();
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/plain");
+    client.println("Connection: close");
+    client.println();
+    client.println("OK");
+    client.stop();
+    return;
+  }
+
+  // --- Preview ---
   if (req.indexOf("GET /preview") >= 0)
   {
     servePreview(client);
@@ -37,20 +123,18 @@ void handleClient()
     return;
   }
 
+  // --- Download old CSV files: /download?file=NAME.csv ---
   if (req.indexOf("GET /download?file=") >= 0)
   {
     int idx = req.indexOf("file=") + 5;
     String filename = req.substring(idx);
     filename.trim();
-
-    // Truncate at ".csv" to remove trailing HTTP
-    int endIdx = filename.indexOf(".csv");
+    int endIdx = filename.indexOf('.');
     if (endIdx != -1)
     {
-      filename = filename.substring(0, endIdx + 4);
+      // truncate anything after the name (removes HTTP tail)
+      filename = filename.substring(0, endIdx) + filename.substring(endIdx, endIdx + 4);
     }
-
-    // Only allow safe filenames
     if (filename.indexOf('/') >= 0 || !filename.endsWith(".csv"))
     {
       client.println("HTTP/1.1 400 Bad Request\r\n\r\nInvalid filename.");
@@ -64,25 +148,46 @@ void handleClient()
     return;
   }
 
-  if (req.indexOf("GET /sampling?interval=") >= 0)
+  // --- Serve static files from LittleFS (fall back to main page) ---
+  // GET / or GET /index.html
+  if (req.indexOf("GET /") >= 0)
   {
-    int idx = req.indexOf("interval=") + 9;
-    String val = req.substring(idx);
-    val.trim();
-    float seconds = val.toFloat();
-    if (seconds >= 0.1 && seconds <= 30.0)
+    // extract path (very small parser)
+    int s = req.indexOf(' ');
+    int e = req.indexOf(' ', s + 1);
+    String path = "/";
+    if (s >= 0 && e > s)
     {
-      setSamplingInterval(seconds);
+      path = req.substring(s + 1, e);
     }
+    if (path == "/") path = "/index.html";
+    // serve from LittleFS if exists
+    if (LittleFS.exists(path))
+    {
+      File f = LittleFS.open(path, "r");
+      if (f)
+      {
+        // simple content type
+        String ct = "text/plain";
+        if (path.endsWith(".html")) ct = "text/html";
+        else if (path.endsWith(".js")) ct = "application/javascript";
+        else if (path.endsWith(".css")) ct = "text/css";
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: " + ct);
+        client.println("Connection: close");
+        client.println();
+        while (f.available())
+        {
+          client.write(f.read());
+        }
+        f.close();
+        client.stop();
+        return;
+      }
+    }
+    // otherwise fall back to old main page
     serveMainPage(client);
-    client.stop();
-    return;
-  }
-
-  if (req.startsWith("POST /newfile"))
-  {
-    startNewLogFile();
-    serveMainPage(client);
+    delay(1);
     client.stop();
     return;
   }
