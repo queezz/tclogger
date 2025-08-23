@@ -173,6 +173,15 @@ void handleClient()
   // GET / or GET /index.html
   if (req.indexOf("GET /") >= 0)
   {
+    // quick handle favicon requests to avoid LittleFS create attempts
+    if (req.indexOf("GET /favicon.ico") >= 0 || req.indexOf("GET /favicon.png") >= 0)
+    {
+      client.println("HTTP/1.1 204 No Content");
+      client.println("Connection: close");
+      client.println();
+      client.stop();
+      return;
+    }
     // extract path (very small parser)
     int s = req.indexOf(' ');
     int e = req.indexOf(' ', s + 1);
