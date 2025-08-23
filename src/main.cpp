@@ -15,6 +15,9 @@ String currentLogFile = ""; // for displaying
 unsigned long lastFlush = 0;
 const unsigned long flushInterval = 10000; // 10s
 
+// I2C mutex
+SemaphoreHandle_t I2C_MTX = NULL;
+
 // MARK: Setup
 void setup()
 {
@@ -27,6 +30,10 @@ void setup()
   setupThermocouple();
   setupSDCard();
   setupWebServer();
+  // Initialize I2C mutex and Wire
+  I2C_MTX = xSemaphoreCreateMutex();
+  Wire.begin();
+  Wire.setTimeOut(50);
 }
 
 // MARK: Loop

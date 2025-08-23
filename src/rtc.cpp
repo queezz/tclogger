@@ -2,6 +2,10 @@
 #include <Wire.h>
 #include <time.h>
 #include <sys/time.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
+extern SemaphoreHandle_t I2C_MTX;
 
 static RTC_DS3231 rtc;
 
