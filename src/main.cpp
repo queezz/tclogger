@@ -5,7 +5,7 @@
 #include "SdCard.h"
 #include "SpiDevices.h"
 #include "TimeSync.h"
-#include "WebServer.h"
+#include "Webserver.h"
 #include "Sampling.h"
 #include "rtc.h"
 
@@ -71,15 +71,18 @@ void loop()
   }
 
   String status;
-
-  if (!Network::isConnected())
+  IPAddress ip = Network::ip();
+  if (Network::mode() == Network::Mode::AP)
   {
-    status = "WiFi error / no IP";
+    status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+  }
+  else if (Network::isConnected())
+  {
+    status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
   }
   else
   {
-    IPAddress ip = Network::ip();
-    status = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+    status = "WiFi error / no IP";
   }
 
   // For OLED, show smoothed value if available

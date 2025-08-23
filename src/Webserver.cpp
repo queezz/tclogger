@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <FS.h>
 #include <LittleFS.h>
-#include "WebServer.h"
+#include "Webserver.h"
 #include "Network.h"
 #include "Thermocouple.h"
 #include "SdCard.h"
@@ -80,7 +80,7 @@ void handleClient()
   if (req.indexOf("GET /api/health") >= 0)
   {
     long rssi = WiFi.RSSI();
-    IPAddress ip = WiFi.localIP();
+    IPAddress ip = Network::ip();
     String j = "{";
     j += "\"rssi\":" + String(rssi) + ",";
     j += "\"ip\":\"" + String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]) + "\",";

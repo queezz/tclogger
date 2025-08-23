@@ -17,6 +17,8 @@ bool trySTA(uint32_t timeout_ms) {
 
 void startAP() {
   WiFi.mode(WIFI_AP);
+  // Ensure a known AP IP (default 192.168.4.1) and netmask
+  WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   bool ok = WiFi.softAP(AP_SSID, (strlen(AP_PASS) >= 8) ? AP_PASS : nullptr);
   if (!ok) WiFi.softAP(AP_SSID);
 }
@@ -24,6 +26,8 @@ void startAP() {
 
 void Network::begin(uint32_t connect_timeout_ms) {
   if (WiFi.getMode() != WIFI_OFF) WiFi.disconnect(true, true);
+  // Avoid writing WiFi credentials/mode to NVS during mode switches
+  WiFi.persistent(false);
   g_mode = Network::Mode::None;
 
   Serial.println("[NET] Connecting STA...");
@@ -40,7 +44,7 @@ void Network::begin(uint32_t connect_timeout_ms) {
 
 bool Network::isConnected() {
   if (g_mode == Mode::STA) return WiFi.status() == WL_CONNECTED;
-  if (g_mode == Mode::AP)  return WiFi.softAPgetStationNum() >= 0;
+  if (g_mode == Mode::AP)  return WiFi.softAPgetStationNum() > 0;
   return false;
 }
 
