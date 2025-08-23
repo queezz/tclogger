@@ -7,3 +7,11 @@ for k-type thermocouple
 - W5500 LAN module
 - micro SD card adapter
 - ESP32 DEVKITC v.4
+
+## Gzip
+```bash
+gzip -k -9 data/index.html
+gzip -k -9 data/app.js
+gzip -k -9 data/style.css
+
+```

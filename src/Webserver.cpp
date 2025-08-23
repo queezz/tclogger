@@ -191,24 +191,52 @@ void handleClient()
       path = req.substring(s + 1, e);
     }
     if (path == "/") path = "/index.html";
-    // serve from LittleFS if exists
-    if (LittleFS.exists(path))
+    // serve from LittleFS if exists (support precompressed .gz and Cache-Control)
+    String filePath = path;
+    bool useGz = false;
+    // prefer precompressed asset if present
+    if (LittleFS.exists(path + ".gz"))
     {
-      File f = LittleFS.open(path, "r");
+      filePath = path + ".gz";
+      useGz = true;
+    }
+    if (LittleFS.exists(filePath))
+    {
+      File f = LittleFS.open(filePath, "r");
       if (f)
       {
-        // simple content type
+        // determine content-type based on original path (without .gz)
+        String orig = path;
         String ct = "text/plain";
-        if (path.endsWith(".html")) ct = "text/html";
-        else if (path.endsWith(".js")) ct = "application/javascript";
-        else if (path.endsWith(".css")) ct = "text/css";
+        if (orig.endsWith(".html")) ct = "text/html";
+        else if (orig.endsWith(".js")) ct = "application/javascript";
+        else if (orig.endsWith(".css")) ct = "text/css";
+        else if (orig.endsWith(".svg")) ct = "image/svg+xml";
+        else if (orig.endsWith(".png")) ct = "image/png";
+        else if (orig.endsWith(".jpg") || orig.endsWith(".jpeg")) ct = "image/jpeg";
+
+        size_t len = f.size();
+
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: " + ct);
+        if (useGz) client.println("Content-Encoding: gzip");
+        client.println("Content-Length: " + String(len));
+
+        // Cache policy: short for HTML, long for static assets
+        if (orig.endsWith(".html") || orig == "/index.html")
+          client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+        else
+          client.println("Cache-Control: public, max-age=31536000, immutable");
+
         client.println("Connection: close");
         client.println();
+
+        const size_t bufSize = 512;
+        uint8_t buffer[bufSize];
         while (f.available())
         {
-          client.write(f.read());
+          size_t r = f.read(buffer, bufSize);
+          if (r > 0) client.write(buffer, r);
         }
         f.close();
         client.stop();
