@@ -259,13 +259,21 @@ void servePreview(WiFiClient &client)
   client.println("Content-Type: text/html");
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><title>Log Preview</title></head><body>");
-  client.println("<p><a href=\"/\">Main Page</a></p>");
-  client.println("<h2>Recent Log Files</h2>");
+  client.println("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Download CSV</title>");
+  client.println("<style>:root{--bg:#0f1720;--card:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#4fd1c5} @media(prefers-color-scheme:light){:root{--bg:#f6f9fc;--card:#ffffff;--text:#06202b;--muted:#456275;--accent:#0ea5a4}} html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;background:var(--bg);color:var(--text)} .app{max-width:900px;margin:0 auto;padding:18px;box-sizing:border-box} header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px} h1{font-size:1rem;margin:0;color:var(--accent)} .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)} a{color:var(--accent);text-decoration:none} ul{margin:0;padding-left:18px} li{margin:8px 0} .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .btn{display:inline-block;background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0;padding:10px 12px;border-radius:8px;font-size:.95rem}</style></head><body>");
+  client.println("<div class=\"app\">");
+  client.println("<header><h1>ESP32 Temp Logger</h1><a class=\"btn\" href=\"/\">Back</a></header>");
+  client.println("<section class=\"card\">");
+  client.print("<div class=\"row\"><div>Current log: <b>");
+  client.print(getLogFilename());
+  client.println("</b></div></div>");
+  client.println("<h3 style=\"margin:12px 0 8px\">Download CSV</h3>");
   client.println("<ul>");
   listRecentLogs(client);
   client.println("</ul>");
-  client.println("</body></html>");
+  client.println("<p class=\"row\" style=\"margin-top:12px\"><span class=\"muted\">Tap a file to download.</span></p>");
+  client.println("</section>");
+  client.println("</div></body></html>");
 }
 
 // MARK: list Logs
