@@ -161,6 +161,7 @@
       // Lightweight state
       let statusTimer = null; let statusPollMs = 2000;
       let tempTimer = null; let tempPollMs = 1000;
+      let lastTempTs = 0;
       let samples = []; const maxSamples = 240;
       let plotOn = false; let visible = !document.hidden;
 
@@ -210,15 +211,19 @@
 
       async function pollTemp(){
         if(document.hidden || !plotOn) return;
-        const d = await fetchJson(API.temp);
+        const d = await fetchJson(API.temp + (lastTempTs ? ('?after=' + encodeURIComponent(lastTempTs)) : ''));
         if(d && typeof d.t !== 'undefined'){
-          samples.push({t: d.ts || Date.now(), v: Number(d.t)});
+          const ts = d.ts || Date.now();
+          lastTempTs = ts;
+          samples.push({t: ts, v: Number(d.t)});
           if(samples.length>maxSamples) samples.shift();
           if(visible) drawPlot();
         }
       }
       function startTempPoll(){ if(tempTimer) clearInterval(tempTimer); tempTimer = setInterval(pollTemp, tempPollMs); }
       function stopTempPoll(){ if(tempTimer) clearInterval(tempTimer); tempTimer = null }
+
+      function fmtDur(ms){ if(ms>=60000){ const m=Math.round(ms/60000); return m+"m" } const s=Math.round(ms/1000); return s+"s" }
 
       // Chart drawing (very small, no deps)
       function drawPlot(){
@@ -228,14 +233,47 @@
         ctx.clearRect(0,0,w,h);
         if(samples.length<2) return;
         const values = samples.map(s=>s.v);
-        const min = Math.min(...values); const max = Math.max(...values); const range = Math.max(0.1, max-min);
+
+        // layout margins
+        const mL = 36, mR = 8, mT = 8, mB = 22;
+        const plotW = Math.max(1, w - mL - mR);
+        const plotH = Math.max(1, h - mT - mB);
+
+        // data extents with small padding
+        let vMin = Math.min(...values), vMax = Math.max(...values);
+        let vRange = vMax - vMin; if(vRange < 0.1){ vRange = 0.1; vMin = vMin - 0.05; vMax = vMin + 0.1; }
+        const pad = vRange*0.08; const yMin = vMin - pad; const yMax = vMax + pad; const ySpan = yMax - yMin;
+
+        // grid + axes
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+        const yTicks = [yMin, (yMin+yMax)/2, yMax];
+        yTicks.forEach(tv=>{
+          const y = mT + plotH - ((tv - yMin)/ySpan)*plotH;
+          ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+plotW, y); ctx.stroke();
+        });
+        ctx.beginPath(); ctx.moveTo(mL, mT); ctx.lineTo(mL, mT+plotH); ctx.lineTo(mL+plotW, mT+plotH); ctx.stroke();
+
+        // labels
+        ctx.fillStyle = 'rgba(159,176,200,0.95)'; ctx.font = '12px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        yTicks.forEach(tv=>{
+          const y = mT + plotH - ((tv - yMin)/ySpan)*plotH;
+          ctx.fillText(tv.toFixed(1), mL - 6, y);
+        });
+        const t0 = samples[0].t || Date.now(); const tN = samples[samples.length-1].t || Date.now();
+        const spanMs = Math.max(1, tN - t0);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText('-'+fmtDur(spanMs), mL, mT+plotH+4);
+        ctx.fillText('-'+fmtDur(spanMs/2), mL + plotW/2, mT+plotH+4);
+        ctx.textAlign = 'right'; ctx.fillText('now', mL+plotW, mT+plotH+4);
+
+        // series
         ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(79,209,197,0.95)'; ctx.beginPath();
         for(let i=0;i<values.length;i++){
-          const x = (i/(values.length-1))*(w-8)+4; const y = h - ((values[i]-min)/range)*(h-8)-4;
+          const x = mL + (i/(values.length-1))*plotW; const y = mT + plotH - ((values[i]-yMin)/ySpan)*plotH;
           if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
         }
         ctx.stroke();
-        ctx.fillStyle = 'rgba(79,209,197,0.95)'; const last = values[values.length-1]; const lx = w-6; const ly = h - ((last-min)/range)*(h-8)-4;
+        ctx.fillStyle = 'rgba(79,209,197,0.95)'; const last = values[values.length-1]; const lx = mL+plotW; const ly = mT + plotH - ((last-yMin)/ySpan)*plotH;
         ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2); ctx.fill();
       }
 
@@ -248,7 +286,7 @@
       el.plotToggle.addEventListener('change', e=>{
         plotOn = e.target.checked;
         el.chartCard.classList.toggle('hidden', !plotOn);
-        if(plotOn && visible){ startTempPoll(); drawPlot(); } else { stopTempPoll(); }
+        if(plotOn && visible){ samples = []; startTempPoll(); drawPlot(); } else { stopTempPoll(); }
       });
 
       el.setIntervalBtn.addEventListener('click', async ()=>{

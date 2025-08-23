@@ -59,7 +59,8 @@ void handleClient()
   // --- API: /api/temp ---
   if (req.indexOf("GET /api/temp") >= 0)
   {
-    float temp = readTemperature();
+    double tavg = getCurrentAverage();
+    float temp = isnan(tavg) ? readTemperature() : (float)tavg;
     unsigned long ts = millis();
     String j = "{";
     j += "\"t\":" + String(temp, 2) + ",";
