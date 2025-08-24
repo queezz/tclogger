@@ -159,8 +159,8 @@
       };
 
       // Lightweight state
-      let statusTimer = null; let statusPollMs = 2000;
-      let tempTimer = null; let tempPollMs = 1000;
+      let statusTimer = null; let statusPollMs = 1000; // fixed UI status refresh ~1s
+      let tempTimer = null; let tempPollMs = 1000; // plot polling ~1s when enabled
       let lastTempTs = 0;
       let samples = []; const maxSamples = 240;
       let plotOn = false; let visible = !document.hidden;
@@ -200,8 +200,7 @@
         el.logLine.textContent = 'log: ' + logName;
         el.intervalLine.textContent = 'interval: ' + Number(intervalSec).toFixed(3) + 's';
 
-        const newStatusMs = Math.max(500, Math.min(60000, (data.interval_ms || statusPollMs)));
-        if(Math.abs(newStatusMs - statusPollMs) > 20){ statusPollMs = newStatusMs; restartStatusPoll(); }
+        // Keep UI polling independent of sampling interval; do not auto-adjust statusPollMs
         if(plotOn && visible) drawPlot();
       }
 
