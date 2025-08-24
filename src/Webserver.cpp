@@ -189,6 +189,126 @@ void handleClient()
     return;
   }
 
+  // --- API: /files.json ---
+  if (req.indexOf("GET /files.json") >= 0)
+  {
+    // Return a JSON array of CSV log files (name=basename, size, mtime)
+    deselectAllSPI();
+    digitalWrite(CS_SD, LOW);
+
+    auto appendDirCsv = [&](const char *dirPath, String &outJson, std::vector<String> &seen){
+      File dir = SD.open(dirPath);
+      if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return; }
+      File entry = dir.openNextFile();
+      while (entry)
+      {
+        if (!entry.isDirectory())
+        {
+          String full = entry.name();
+          if (full.endsWith(".csv"))
+          {
+            // basename
+            String base = full;
+            int slash = base.lastIndexOf('/');
+            if (slash >= 0 && slash < (int)base.length()-1) base = base.substring(slash+1);
+            bool dup = false;
+            for (const auto &s : seen) { if (s == base) { dup = true; break; } }
+            if (!dup)
+            {
+              seen.push_back(base);
+              size_t sz = entry.size();
+              outJson += "{\"name\":\"" + base + "\",\"size\":" + String(sz) + ",\"mtime\":0},";
+            }
+          }
+        }
+        entry.close();
+        entry = dir.openNextFile();
+      }
+      dir.close();
+    };
+
+    String j = "[";
+    std::vector<String> seen;
+    appendDirCsv("/logs", j, seen);
+    appendDirCsv("/", j, seen);
+
+    digitalWrite(CS_SD, HIGH);
+
+    if (j.endsWith(",")) j.remove(j.length()-1);
+    j += "]";
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+    client.println(j);
+    client.stop();
+    return;
+  }
+
+  // --- API: /logs/<filename> ---
+  if (req.indexOf("GET /logs/") >= 0)
+  {
+    // Extract filename (path between /logs/ and space)
+    int idx = req.indexOf("GET /logs/") + 10; // length of "GET /logs/"
+    int sp = req.indexOf(' ', idx);
+    if (sp < 0) sp = req.length();
+    String filename = req.substring(idx, sp);
+    filename.trim();
+
+    // Security checks
+    if (filename.length() == 0 || filename.indexOf("/") >= 0 || !filename.endsWith(".csv"))
+    {
+      client.println("HTTP/1.1 400 Bad Request");
+      client.println("Connection: close");
+      client.println();
+      client.println("Invalid filename.");
+      client.stop();
+      return;
+    }
+
+    String path = "/logs/" + filename;
+    deselectAllSPI();
+    digitalWrite(CS_SD, LOW);
+    File f = SD.open(path);
+    if (!f)
+    {
+      // Fallback to SD root for legacy files
+      path = "/" + filename;
+      f = SD.open(path);
+    }
+    if (!f || f.isDirectory())
+    {
+      client.println("HTTP/1.1 404 Not Found");
+      client.println("Connection: close");
+      client.println();
+      client.println("File not found.");
+      if (f) f.close();
+      digitalWrite(CS_SD, HIGH);
+      client.stop();
+      return;
+    }
+
+    size_t len = f.size();
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/csv");
+    client.println("Content-Length: " + String(len));
+    client.println("Connection: close");
+    client.println();
+
+    const size_t bufSize = 256;
+    uint8_t buffer[bufSize];
+    while (f.available())
+    {
+      size_t r = f.read(buffer, bufSize);
+      if (r > 0) client.write(buffer, r);
+    }
+    f.close();
+    digitalWrite(CS_SD, HIGH);
+    client.stop();
+    return;
+  }
+
   // --- Download old CSV files: /download?file=NAME.csv ---
   if (req.indexOf("GET /download?file=") >= 0)
   {

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Log Plotter</title>
+    <style>
+      :root{--bg:#0f1720;--card:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#4fd1c5}
+      html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text)}
+      .app{max-width:1000px;margin:0 auto;padding:12px;box-sizing:border-box}
+      .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px}
+      .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      select,input,button{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text);padding:8px;border-radius:8px}
+      button.primary{background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0}
+      #canvasWrap{width:100%;height:360px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);overflow:hidden}
+      canvas{width:100%;height:100%;display:block}
+      @media (max-width:540px){ #canvasWrap{height:260px} }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="row" style="justify-content:space-between">
+        <h1 style="margin:0;font-size:1rem;color:var(--accent)">Client-side CSV Plotter</h1>
+        <a href="/" style="color:var(--muted);text-decoration:none">Back</a>
+      </header>
+
+      <section class="card">
+        <div class="row">
+          <label class="muted">File:</label>
+          <select id="fileSelect"><option>Loading…</option></select>
+          <button id="loadBtn" class="primary">Load</button>
+          <label class="muted">Decimate:</label>
+          <input id="decimate" type="number" value="1" min="1" style="width:80px" />
+          <label class="muted">Avg window:</label>
+          <input id="avgWindow" type="number" value="1" min="1" style="width:80px" />
+          <button id="savePng">Save PNG</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="muted">Column:</label>
+          <select id="colSelect"></select>
+        </div>
+      </section>
+
+      <section class="card" id="chartCard">
+        <div id="canvasWrap"><canvas id="chart"></canvas></div>
+      </section>
+
+      <section class="card" id="infoCard"><div id="info" class="muted">Idle</div></section>
+    </div>
+
+    <script>
+      const API_FILES = '/files.json';
+      const API_LOG_PREFIX = '/logs/';
+
+      const el = {
+        fileSelect: document.getElementById('fileSelect'),
+        loadBtn: document.getElementById('loadBtn'),
+        decimate: document.getElementById('decimate'),
+        avgWindow: document.getElementById('avgWindow'),
+        colSelect: document.getElementById('colSelect'),
+        info: document.getElementById('info'),
+        savePng: document.getElementById('savePng'),
+        canvas: document.getElementById('chart')
+      };
+
+      let data = []; let headers = [];
+
+      async function fetchJson(path){ try{ const r = await fetch(path); if(!r.ok) throw new Error(r.status); return await r.json(); }catch(e){return null} }
+
+      function setInfo(t){ el.info.textContent = t }
+
+      async function loadFiles(){ setInfo('Loading file list…'); const list = await fetchJson(API_FILES); el.fileSelect.innerHTML = ''; if(!list || !Array.isArray(list) || list.length===0){ el.fileSelect.innerHTML = '<option>No files</option>'; setInfo('No CSV files found'); return; } list.forEach(f=>{ const base = (f && f.name) ? String(f.name).split('/').pop() : ''; if(!base) return; const o=document.createElement('option'); o.value=base; o.textContent = base + (f.size? (' (' + Math.round(f.size/1024) + 'KB)') : ''); el.fileSelect.appendChild(o); }); setInfo('Select a file'); }
+
+      async function loadSelected(){ const name = el.fileSelect.value; if(!name) return; setInfo('Fetching ' + name + '…'); data = []; headers = []; try{ const r = await fetch(API_LOG_PREFIX + name); if(!r.ok) throw new Error('http '+r.status); const txt = await r.text(); parseCSV(txt); setInfo('Parsed ' + data.length + ' rows'); populateColumns(); draw(); }catch(e){ setInfo('Error: ' + e.message); } }
+
+      function parseCSV(text){ const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0 && !l.startsWith('#')); if(lines.length===0) return; // detect header
+        const first = lines[0].split(',').map(s=>s.trim()); let hasHeader = first.every(c=>isNaN(Number(c))); if(hasHeader){ headers = first; lines.shift(); } else { headers = first.map((_,i)=>'col'+i); }
+        data = lines.map(line=> line.split(',').map(v=>{ const n = Number(v); return isNaN(n) ? v : n; })); }
+
+      function populateColumns(){ el.colSelect.innerHTML=''; headers.forEach((h,idx)=>{ const o=document.createElement('option'); o.value=idx; o.textContent = h; el.colSelect.appendChild(o); }); }
+
+      // Simple drawing with pan/zoom
+      const c = el.canvas; const ctx = c.getContext('2d'); let dpr = window.devicePixelRatio || 1;
+      function resizeCanvas(){ const w = c.clientWidth; const h = c.clientHeight; c.width = Math.max(1, Math.floor(w * dpr)); c.height = Math.max(1, Math.floor(h * dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); }
+      window.addEventListener('resize', ()=>{ resizeCanvas(); draw(); });
+
+      // View state
+      let offset = 0; let scale = 1; // scale >1 zoomed in
+      // Pointer interactions
+      let isPanning=false, panStartX=0, startOffset=0;
+      c.addEventListener('pointerdown', e=>{ isPanning=true; panStartX = e.clientX; startOffset = offset; c.setPointerCapture(e.pointerId); });
+      c.addEventListener('pointerup', e=>{ isPanning=false; try{ c.releasePointerCapture(e.pointerId); }catch(_){} });
+      c.addEventListener('pointermove', e=>{ if(!isPanning) return; const dx = e.clientX - panStartX; offset = startOffset + dx / scale; draw(); });
+      c.addEventListener('wheel', e=>{ e.preventDefault(); const oldScale = scale; const factor = e.deltaY > 0 ? 0.9 : 1.1; scale *= factor; scale = Math.max(0.1, Math.min(100, scale)); draw(); }, {passive:false});
+
+      function decimateArray(arr, n){ if(n<=1) return arr; const out=[]; for(let i=0;i<arr.length;i+=n) out.push(arr[i]); return out; }
+      function rollingAverage(arr, w){ if(w<=1) return arr; const out=new Array(arr.length); let sum=0; for(let i=0;i<arr.length;i++){ sum += arr[i]; if(i>=w) sum -= arr[i-w]; if(i>=w-1) out[i] = sum / w; else out[i] = sum / (i+1); } return out; }
+
+      function draw(){ if(!data || data.length===0) { resizeCanvas(); ctx.clearRect(0,0,c.clientWidth,c.clientHeight); return; }
+        resizeCanvas(); const w=c.clientWidth, h=c.clientHeight; ctx.clearRect(0,0,w,h);
+        const col = Number(el.colSelect.value || 0); const dec = Math.max(1, Number(el.decimate.value)||1); const avg = Math.max(1, Number(el.avgWindow.value)||1);
+        const series = data.map(r=> Number(r[col]) ); const decSeries = decimateArray(series, dec); const plotSeries = rollingAverage(decSeries, avg);
+        // compute bounds
+        const vmin = Math.min(...plotSeries), vmax = Math.max(...plotSeries); const pad = (vmax - vmin) * 0.08 || 1; const yMin = vmin - pad, yMax = vmax + pad;
+        // draw axes
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40,8); ctx.lineTo(40,h-24); ctx.lineTo(w-8,h-24); ctx.stroke();
+        // draw series
+        ctx.strokeStyle = 'rgba(79,209,197,0.95)'; ctx.lineWidth = 2; ctx.beginPath();
+        const len = plotSeries.length; if(len<1) return; for(let i=0;i<len;i++){ const x = 40 + ((i - offset) * ( (w-56) / Math.max(1, len-1) )) * scale; const y = 8 + ( (yMax - plotSeries[i]) / (yMax - yMin) ) * (h-32); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+        ctx.stroke();
+      }
+
+      el.loadBtn.addEventListener('click', loadSelected);
+      el.savePng.addEventListener('click', ()=>{ const url = c.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'plot.png'; a.click(); });
+
+      // init
+      (async function(){ await loadFiles(); resizeCanvas(); setInfo('Ready'); })();
+    </script>
+  </body>
+</html>
+
+

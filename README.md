@@ -11,7 +11,5 @@ for k-type thermocouple
 ## Gzip
 ```bash
 gzip -k -9 data/index.html
-gzip -k -9 data/app.js
-gzip -k -9 data/style.css
-
+gzip -k -9 data/plotter.html
 ```
