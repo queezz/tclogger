@@ -2,7 +2,7 @@ import { fetchFileList, fetchFileBlob } from './api.js';
 import { getAllFiles, putFileMeta, getBlob, putBlob, getSeries, putSeries } from './cache.js';
 
 let worker;
-function getWorker(){ if(!worker){ worker = new Worker('./infra/parser.worker.js', { type: 'module' }); } return worker; }
+function getWorker(){ if(!worker){ const url = new URL('./parser.worker.js', import.meta.url); worker = new Worker(url, { type: 'module' }); } return worker; }
 
 export async function getFileListCached(){ const list = await getAllFiles(); return list.sort((a,b)=> (b.lastModified??0)-(a.lastModified??0) || String(b.name).localeCompare(String(a.name))); }
 

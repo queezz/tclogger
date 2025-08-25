@@ -1,5 +1,7 @@
 import { getFileListCached, refreshFileList, ensureSeries } from './infra/datastore.js';
 import { renderPlot } from './plot/render.js';
+import { fetchFileBlob } from './infra/api.js';
+import { getBlob, putBlob } from './infra/cache.js';
 
 const PAGE_SIZE_KEY = 'tcl.pageSize';
 let page = 1; let pageSize = Number(localStorage.getItem(PAGE_SIZE_KEY) || 10); let total = 0; let currentName = null;
@@ -20,10 +22,11 @@ function renderTable(items){ const tb = document.getElementById('logsBody'); if(
     <td>${mtime}</td>
     <td class="actions">
       <button class="plot" data-name="${name}">Plot</button>
-      <a class="button" href="/logs/${encodeURIComponent(name)}" download>Download</a>
+      <button class="dl" data-name="${name}">Download</button>
       <a class="button" href="/plotter.html?file=${encodeURIComponent(name)}" target="_blank">Open in Plotter</a>
     </td>`; tb.appendChild(tr); });
   tb.querySelectorAll('button.plot').forEach(btn=> btn.addEventListener('click', async ()=>{ await onPlot(btn.dataset.name); }));
+  tb.querySelectorAll('button.dl').forEach(btn=> btn.addEventListener('click', async ()=>{ await onDownload(btn.dataset.name); }));
 }
 
 function renderPager(){ const pager = document.getElementById('pager'); const pages = Math.max(1, Math.ceil(total / pageSize)); pager.innerHTML = `
@@ -39,9 +42,11 @@ function bindPager(){ const pager = document.getElementById('pager'); if(!pager)
 async function onPlot(name){ try{
   currentName = name; const card = document.getElementById('inlinePlotCard'); const wrap = document.getElementById('canvasWrap'); const info = document.getElementById('plotInfo'); if(!card||!wrap||!info) return;
   info.textContent = `Loading ${name}…`; card.classList.remove('hidden');
-  const { series } = await ensureSeries(name); // await ensures data ready
+  const { series } = await ensureSeries(name);
   info.textContent = `Preview: ${name} (${series.x.length} points)`;
-  renderPlot(wrap, series, { title: name });
+  renderPlot(wrap, series, { targetPoints: 2000 });
 }catch(e){ console.error(e); const info = document.getElementById('plotInfo'); if(info) info.textContent = 'No data'; }}
+
+async function onDownload(name){ let blob = await getBlob(name); if(!blob){ blob = await fetchFileBlob(name); await putBlob(name, blob); } const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
 
 window.addEventListener('DOMContentLoaded', init);

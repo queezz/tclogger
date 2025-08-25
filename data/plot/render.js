@@ -1,5 +1,20 @@
+const seriesStore = new WeakMap();
+
 export function renderPlot(container, series, opts={}){
   if(!container) return;
+  seriesStore.set(container, { base: cloneSeries(series) });
+  draw(container, series, opts);
+}
+
+export function updatePlot(container, opts={}){
+  if(!container) return;
+  const stored = seriesStore.get(container);
+  if(!stored || !stored.base) return;
+  const processed = applyTransforms(stored.base, opts);
+  draw(container, processed, opts);
+}
+
+function draw(container, series, opts){
   let canvas = container.querySelector('canvas');
   if(!canvas){ canvas = document.createElement('canvas'); canvas.style.width='100%'; canvas.style.height='100%'; container.appendChild(canvas); }
   const ctx = canvas.getContext('2d'); const dpr = window.devicePixelRatio||1;
@@ -19,4 +34,31 @@ export function renderPlot(container, series, opts={}){
   }
   ctx.stroke();
 }
+
 function drawNoData(ctx,w,h){ ctx.fillStyle='rgba(230,238,246,0.75)'; ctx.font='12px system-ui'; ctx.fillText('No data', 12, 18); ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.strokeRect(8,8,w-16,h-16); }
+
+function cloneSeries(s){ return { x: s?.x ? s.x.slice() : [], y: s?.y ? s.y.slice() : [] }; }
+
+function applyTransforms(series, opts={}){
+  const x = series.x, y = series.y; let idx = [...x.keys()];
+  // time range filter
+  const hasT0 = Number.isFinite(opts?.t0); const hasT1 = Number.isFinite(opts?.t1);
+  if(hasT0 || hasT1){ const t0 = hasT0? Number(opts.t0) : -Infinity; const t1 = hasT1? Number(opts.t1) : Infinity; idx = idx.filter(i=> x[i] >= t0 && x[i] <= t1); }
+  // optional decimation by stride
+  const stride = Math.max(1, Number(opts?.decimateStride||1)); if(stride>1){ idx = idx.filter((_,i)=> (i % stride) === 0); }
+  // smoothing by samples (moving average)
+  const smoothN = Math.max(0, Number(opts?.smoothN||0));
+  // smoothing by time window (ms)
+  const smoothMs = Math.max(0, Number(opts?.smoothMs||0));
+  let outX = idx.map(i=> x[i]); let outY = idx.map(i=> y[i]);
+  if(smoothN > 1){ outY = movingAverage(outY, smoothN); }
+  else if(smoothMs > 1){ outY = movingAverageByTime(outX, outY, smoothMs); }
+  // optional targetPoints cap (simple stride)
+  const target = Math.max(0, Number(opts?.targetPoints||0));
+  if(target && outX.length > target){ const step = Math.ceil(outX.length / target); const nn=[]; const ny=[]; for(let i=0;i<outX.length;i+=step){ nn.push(outX[i]); ny.push(outY[i]); } outX = nn; outY = ny; }
+  return { x: outX, y: outY };
+}
+
+function movingAverage(arr, n){ if(n<=1) return arr.slice(); const out=new Array(arr.length); let sum=0; for(let i=0;i<arr.length;i++){ sum += arr[i]; if(i>=n) sum -= arr[i-n]; out[i] = sum / Math.min(i+1, n); } return out; }
+
+function movingAverageByTime(x, y, windowMs){ if(windowMs<=1) return y.slice(); const out=new Array(y.length); let j=0; let sum=0; for(let i=0;i<y.length;i++){ sum += y[i]; while(x[i]-x[j] > windowMs && j<i){ sum -= y[j]; j++; } const count = i - j + 1; out[i] = sum / count; } return out; }
