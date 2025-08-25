@@ -11,9 +11,12 @@
     }
     html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
     .app{max-width:var(--maxw);margin:18px auto;padding:0 12px}
-    .nav{display:flex;gap:12px;align-items:center;margin-bottom:12px}
-    .nav a{color:var(--muted);text-decoration:none;padding:8px;border-radius:6px}
-    .nav a[aria-current="page"],.nav a:hover{background:rgba(255,255,255,0.03);color:var(--text)}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1.brand{font-size:1rem;margin:0}
+    .link{color:var(--accent);text-decoration:none}
+    .nav{display:flex;gap:10px;align-items:center;margin-left:8px}
+    .nav a{color:var(--accent);text-decoration:none;font-size:.95rem}
+    .nav a[aria-current="page"], .nav a:hover{text-decoration:underline}
 
     .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:var(--radius);padding:var(--pad);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
     .row{display:flex;align-items:center;gap:12px}
@@ -26,13 +29,15 @@
     button, a.button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent);padding:6px 10px;border-radius:6px;text-decoration:none;cursor:pointer}
     button[disabled], .disabled{opacity:0.35;cursor:default}
 
+    .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.08);border-top-color:var(--accent);border-radius:50%;display:inline-block;margin-left:8px;vertical-align:middle}
+    .spinner.hidden{display:none}
+
     #pager{display:flex;gap:8px;align-items:center}
 
     .hidden{display:none}
     #canvasWrap{width:100%;height:300px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border-radius:6px;padding:8px}
     #plotCanvas{width:100%;height:100%;display:block}
 
-    /* mobile tweaks */
     @media (max-width:520px){
       table.logs thead{display:none}
       table.logs tbody td{display:block;padding:10px 0}
@@ -42,10 +47,14 @@
 </head>
 <body>
   <div class="app">
-    <header class="nav">
-      <a href="/index.html">Home</a>
-      <a href="/plotter.html">Plotter</a>
-      <a href="/explore.html" aria-current="page">Explore Data</a>
+    <header>
+      <div style="display:flex;align-items:center;gap:12px">
+        <h1 class="brand"><a class="link" href="/index.html">ESP32 Temp Logger</a></h1>
+        <nav class="nav">
+          <a href="/explore.html" aria-current="page">Explore Data</a>
+        </nav>
+      </div>
+      <div style="color:var(--muted)"></div>
     </header>
 
     <section class="card">
@@ -55,13 +64,18 @@
       </div>
 
       <table class="logs" aria-describedby="pager">
-        <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Size</th><th>Actions</th></tr></thead>
         <tbody id="logsBody"></tbody>
       </table>
     </section>
 
     <section class="card hidden" id="inlinePlotCard" style="margin-top:12px">
       <div class="row muted" id="plotInfo" style="margin-bottom:8px"></div>
+      <div class="row" id="plotCtrlRow" style="margin-bottom:8px">
+        <label class="muted">Rolling avg:</label>
+        <input id="smoothNInline" type="number" min="0" value="0" style="width:80px" />
+        <button id="showAllBtn" class="button">Show all files</button>
+      </div>
       <div id="canvasWrap"><canvas id="plotCanvas"></canvas></div>
     </section>
   </div>
