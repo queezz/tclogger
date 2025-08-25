@@ -15,7 +15,6 @@
       .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px}
       .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
       select,input,button{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text);padding:8px;border-radius:8px}
-      /* dark-themed select popup where supported */
       select, select option { background: var(--card); color: var(--text); }
       select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right:28px }
       button.primary{background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0}
@@ -32,7 +31,7 @@
           <nav class="nav">
             <a href="/index.html">Home</a>
             <a href="/plotter.html">Plotter</a>
-            <a href="/preview">Explore Data</a>
+            <a href="/explore.html">Explore Data</a>
           </nav>
         </div>
         <div style="color:var(--muted)"></div>
@@ -49,131 +48,16 @@
           <input id="avgWindow" type="number" value="1" min="1" style="width:80px" />
           <button id="savePng">Save PNG</button>
         </div>
-        <!-- single fixed columns: time, temperature -->
       </section>
 
       <section class="card" id="chartCard">
-        <div id="canvasWrap"><canvas id="chart"></canvas></div>
+        <div id="canvasWrap"><canvas></canvas></div>
       </section>
 
       <section class="card" id="infoCard"><div id="info" class="muted">Idle</div></section>
     </div>
 
-    <script>
-      const API_FILES = '/files.json';
-      const API_LOG_PREFIX = '/logs/';
-
-      const el = {
-        fileSelect: document.getElementById('fileSelect'),
-        loadBtn: document.getElementById('loadBtn'),
-        decimate: document.getElementById('decimate'),
-        avgWindow: document.getElementById('avgWindow'),
-        info: document.getElementById('info'),
-        savePng: document.getElementById('savePng'),
-        canvas: document.getElementById('chart')
-      };
-
-      // raw rows plus derived series arrays
-      let data = []; let headers = [];
-      let timeSeries = []; // milliseconds since epoch or index fallback
-      let tempSeries = [];
-
-      async function fetchJson(path){ try{ const r = await fetch(path); if(!r.ok) throw new Error(r.status); return await r.json(); }catch(e){return null} }
-
-      function setInfo(t){ el.info.textContent = t }
-
-      async function loadFiles(){ setInfo('Loading file list…'); const list = await fetchJson(API_FILES); el.fileSelect.innerHTML = ''; if(!list || !Array.isArray(list) || list.length===0){ el.fileSelect.innerHTML = '<option>No files</option>'; setInfo('No CSV files found'); return; }
-        // sort by name descending to show newer files first if names contain timestamps
-        list.sort((a,b)=>{ if(!a || !b) return 0; const na = String(a.name).toLowerCase(); const nb = String(b.name).toLowerCase(); return nb.localeCompare(na); });
-        list.forEach(f=>{ const base = (f && f.name) ? String(f.name).split('/').pop() : ''; if(!base) return; const o=document.createElement('option'); o.value=base; o.textContent = base + (f.size? (' (' + Math.round(f.size/1024) + 'KB)') : ''); el.fileSelect.appendChild(o); }); setInfo('Select a file'); }
-
-      async function loadSelected(){ const name = el.fileSelect.value; if(!name) return; setInfo('Fetching ' + name + '…'); data = []; headers = []; timeSeries = []; tempSeries = []; try{ const r = await fetch(API_LOG_PREFIX + name); if(!r.ok) throw new Error('http '+r.status); const txt = await r.text(); parseCSV(txt); setInfo('Parsed ' + data.length + ' rows'); draw(); }catch(e){ setInfo('Error: ' + e.message); } }
-
-      function parseCSV(text){ const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0 && !l.startsWith('#')); if(lines.length===0) return; // detect header
-        const first = lines[0].split(',').map(s=>s.trim()); let hasHeader = first.every(c=>isNaN(Number(c))); if(hasHeader){ headers = first; lines.shift(); } else { headers = first.map((_,i)=>'col'+i); }
-        // parse rows into arrays
-        data = lines.map(line=> line.split(',').map(v=>{ const n = Number(v); return isNaN(n) ? v : n; }));
-        // derive time and temperature series (assume first column = time, second = temperature)
-        timeSeries = data.map((r,idx)=>{
-          const t = r[0]; if(typeof t === 'number') return t; const parsed = Date.parse(String(t)); if(!isNaN(parsed)) return parsed; // fallback to index (ms)
-          return idx * 1000;
-        });
-        tempSeries = data.map(r=>{ const v = Number(r[1]); return isNaN(v) ? NaN : v; });
-      }
-
-      // Simple drawing with pan/zoom
-      const c = el.canvas; const ctx = c.getContext('2d'); let dpr = window.devicePixelRatio || 1;
-      function resizeCanvas(){ const w = c.clientWidth; const h = c.clientHeight; c.width = Math.max(1, Math.floor(w * dpr)); c.height = Math.max(1, Math.floor(h * dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); }
-      window.addEventListener('resize', ()=>{ resizeCanvas(); draw(); });
-
-      // View state
-      let offset = 0; let scale = 1; // scale >1 zoomed in
-      // Pointer interactions
-      let isPanning=false, panStartX=0, startOffset=0;
-      c.addEventListener('pointerdown', e=>{ isPanning=true; panStartX = e.clientX; startOffset = offset; c.setPointerCapture(e.pointerId); });
-      c.addEventListener('pointerup', e=>{ isPanning=false; try{ c.releasePointerCapture(e.pointerId); }catch(_){} });
-      c.addEventListener('pointermove', e=>{ if(!isPanning) return; const dx = e.clientX - panStartX; offset = startOffset + dx / scale; draw(); });
-      c.addEventListener('wheel', e=>{ e.preventDefault(); const oldScale = scale; const factor = e.deltaY > 0 ? 0.9 : 1.1; scale *= factor; scale = Math.max(0.1, Math.min(100, scale)); draw(); }, {passive:false});
-
-      function decimateArray(arr, n){ if(n<=1) return arr; const out=[]; for(let i=0;i<arr.length;i+=n) out.push(arr[i]); return out; }
-      function rollingAverage(arr, w){ if(w<=1) return arr; const out=new Array(arr.length); let sum=0; for(let i=0;i<arr.length;i++){ sum += arr[i]; if(i>=w) sum -= arr[i-w]; if(i>=w-1) out[i] = sum / w; else out[i] = sum / (i+1); } return out; }
-
-      function draw(){ if(!data || data.length===0) { resizeCanvas(); ctx.clearRect(0,0,c.clientWidth,c.clientHeight); return; }
-        resizeCanvas(); const w=c.clientWidth, h=c.clientHeight; ctx.clearRect(0,0,w,h);
-        const dec = Math.max(1, Number(el.decimate.value)||1); const avg = Math.max(1, Number(el.avgWindow.value)||1);
-        // apply decimation and averaging to temperature while keeping time aligned
-        const decTime = decimateArray(timeSeries, dec); const decTemp = decimateArray(tempSeries, dec);
-        const plotTemp = rollingAverage(decTemp, avg);
-        const len = Math.min(decTime.length, plotTemp.length);
-        if(len<1) return;
-        // compute bounds for temperature
-        const vs = plotTemp.slice(0,len).filter(v=>!isNaN(v)); if(vs.length===0) return;
-        const vmin = Math.min(...vs), vmax = Math.max(...vs);
-        // base data padding (fraction of range) to ensure some data margin
-        const basePad = Math.max((vmax - vmin) * 0.12, 0.5);
-        let yMin = vmin - basePad, yMax = vmax + basePad;
-
-        // compute time bounds
-        const tmin = Math.min(...decTime.slice(0,len)), tmax = Math.max(...decTime.slice(0,len)); const tpad = (tmax - tmin) * 0.02 || 1000;
-
-        // draw axes (left margin 60 for y labels, bottom 40 for x labels)
-        // add extra pixel padding for Y so visual breathing room is visible regardless of data-range
-        const extraYPad = 24;
-        const marginLeft = 60, marginRight = 16, marginTop = 12 + extraYPad, marginBottom = 40 + extraYPad;
-
-        // convert pixel padding to data units so Y gap is visible even for small numeric ranges
-        const plotHeight = h - marginTop - marginBottom;
-        if(plotHeight > 0){ const dataPerPixel = (yMax - yMin) / Math.max(1, plotHeight); const pixelPad = extraYPad; const dataPadFromPixels = dataPerPixel * pixelPad; yMin -= dataPadFromPixels; yMax += dataPadFromPixels; }
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(marginLeft, marginTop); ctx.lineTo(marginLeft, h - marginBottom); ctx.lineTo(w - marginRight, h - marginBottom); ctx.stroke();
-
-        // draw y ticks and labels (bright for dark mode)
-        ctx.fillStyle = 'rgba(230,238,246,0.95)'; ctx.font = '12px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        const yTicks = 5; for(let i=0;i<=yTicks;i++){ const v = yMin + (i / yTicks) * (yMax - yMin); const y = marginTop + ( (yMax - v) / (yMax - yMin) ) * (h - marginTop - marginBottom); ctx.beginPath(); ctx.moveTo(marginLeft - 6, y); ctx.lineTo(marginLeft, y); ctx.stroke(); ctx.fillText(v.toFixed(2), marginLeft - 10, y); }
-
-        // draw x ticks and labels (format time in 24-hour, no date)
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; const xTicks = 6; for(let i=0;i<=xTicks;i++){ const t = tmin + (i / xTicks) * (tmax - tmin); const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); ctx.beginPath(); ctx.moveTo(x, h - marginBottom); ctx.lineTo(x, h - marginBottom + 6); ctx.stroke(); const dt = new Date(t); const label = dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); ctx.fillText(label, x, h - marginBottom + 8); }
-
-        // draw series
-        ctx.strokeStyle = 'rgba(79,209,197,0.95)'; ctx.lineWidth = 2; ctx.beginPath();
-        for(let i=0;i<len;i++){ const t = decTime[i]; const val = plotTemp[i]; const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); const y = marginTop + ( (yMax - val) / (yMax - yMin) ) * (h - marginTop - marginBottom); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
-        ctx.stroke();
-
-        // axis labels
-        ctx.fillStyle = 'var(--muted)'; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
-        ctx.fillText('Time', marginLeft + (w - marginLeft - marginRight)/2, h - Math.floor(marginBottom/2) + 6);
-        ctx.save(); 
-        ctx.translate(marginLeft - 60, marginTop + Math.floor((h - marginTop - marginBottom)/2));
-        ctx.rotate(-Math.PI/2); ctx.textAlign = 'center';
-        ctx.fillText('Temperature', 0, 0); ctx.restore();
-      }
-
-      el.loadBtn.addEventListener('click', loadSelected);
-      el.savePng.addEventListener('click', ()=>{ const url = c.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'plot.png'; a.click(); });
-
-      // init
-      (async function(){ await loadFiles(); resizeCanvas(); setInfo('Ready'); })();
-    </script>
+    <script type="module" src="./plotter.js"></script>
   </body>
 </html>
 
