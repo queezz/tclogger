@@ -6,6 +6,10 @@
     <title>Log Plotter</title>
     <style>
       :root{--bg:#0f1720;--card:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#4fd1c5}
+      /* tiny nav to match index.html */
+      .nav{display:flex;gap:10px;align-items:center;margin-left:8px}
+      .nav a{color:var(--accent);text-decoration:none;font-size:.95rem}
+      .nav a:hover{text-decoration:underline}
       html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text)}
       .app{max-width:1000px;margin:0 auto;padding:12px;box-sizing:border-box}
       .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px}
@@ -23,8 +27,15 @@
   <body>
     <div class="app">
       <header class="row" style="justify-content:space-between">
-        <h1 style="margin:0;font-size:1rem;color:var(--accent)">Client-side CSV Plotter</h1>
-        <a href="/" style="color:var(--muted);text-decoration:none">Back</a>
+        <div style="display:flex;align-items:center;gap:12px">
+          <h1 style="margin:0;font-size:1rem;color:var(--accent)">Client-side CSV Plotter</h1>
+          <nav class="nav">
+            <a href="/index.html">Home</a>
+            <a href="/plotter.html">Plotter</a>
+            <a href="/preview">Explore Data</a>
+          </nav>
+        </div>
+        <div style="color:var(--muted)"></div>
       </header>
 
       <section class="card">
