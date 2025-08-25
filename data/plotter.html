@@ -151,7 +151,10 @@
         // axis labels
         ctx.fillStyle = 'var(--muted)'; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
         ctx.fillText('Time', marginLeft + (w - marginLeft - marginRight)/2, h - Math.floor(marginBottom/2) + 6);
-        ctx.save(); ctx.translate(18, marginTop + Math.floor((h - marginTop - marginBottom)/2)); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.fillText('Temperature', 0, 0); ctx.restore();
+        ctx.save(); 
+        ctx.translate(marginLeft - 60, marginTop + Math.floor((h - marginTop - marginBottom)/2));
+        ctx.rotate(-Math.PI/2); ctx.textAlign = 'center';
+        ctx.fillText('Temperature', 0, 0); ctx.restore();
       }
 
       el.loadBtn.addEventListener('click', loadSelected);
