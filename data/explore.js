@@ -5,6 +5,7 @@ import { getBlob, putBlob } from './infra/cache.js';
 
 const PAGE_SIZE_KEY = 'tcl.pageSize';
 let page = 1; let pageSize = Number(localStorage.getItem(PAGE_SIZE_KEY) || 10); let total = 0; let currentName = null;
+let tableMinimized = false;
 
 async function init(){
   await renderFromCache();
@@ -13,7 +14,8 @@ async function init(){
   bindInlineControls();
 }
 
-async function renderFromCache(){ const list = await getFileListCached(); total = total || list.length; renderTable(list.slice((page-1)*pageSize, page*pageSize)); renderPager(); }
+// Use actual cached list length for paging to avoid phantom empty pages
+async function renderFromCache(){ const list = await getFileListCached(); total = list.length; renderTable(list.slice((page-1)*pageSize, page*pageSize)); renderPager(); }
 
 function renderTable(items){ const tb = document.getElementById('logsBody'); if(!tb) return; tb.innerHTML=''; items.forEach(f=>{ const tr=document.createElement('tr'); const name=String(f.name||''); const sizeKB=Math.round((f.size||0)/1024);
   tr.dataset.name = name;
@@ -40,7 +42,20 @@ function renderPager(){ const pager = document.getElementById('pager'); const pa
 function bindPager(){ /* noop for now */ }
 
 function bindInlineControls(){ const s = document.getElementById('smoothNInline'); const showAll = document.getElementById('showAllBtn'); if(s){ s.addEventListener('input', ()=>{ const n = Math.max(0, Number(s.value)||0); updatePlot(document.getElementById('canvasWrap'), { smoothN:n, smoothMs:0 }); }); }
-  if(showAll){ showAll.addEventListener('click', async ()=>{ currentName=null; await renderFromCache(); document.getElementById('inlinePlotCard')?.classList.add('hidden'); }); }
+  if(showAll){
+    // initialize label
+    showAll.textContent = tableMinimized ? 'Show all files' : 'Minimize table';
+    showAll.addEventListener('click', async ()=>{
+      tableMinimized = !tableMinimized;
+      if(tableMinimized){ // hide other rows, keep current visible
+        if(currentName) minimizeTableToCurrent(currentName);
+        showAll.textContent = 'Show all files';
+      } else {
+        showAll.textContent = 'Minimize table';
+        showAllRows();
+      }
+    });
+  }
 }
 
 async function onPlot(name){ try{
@@ -49,14 +64,16 @@ async function onPlot(name){ try{
   // show spinner in the table row
   const row = document.querySelector(`#logsBody tr[data-name="${cssEscape(name)}"]`);
   const spinner = row?.querySelector('.spinner'); if(spinner) spinner.classList.remove('hidden');
-  collapseToCurrent(name);
+  // do not auto-hide files; user controls minimization via the toggle
   const { series } = await ensureSeries(name);
   info.textContent = `Preview: ${name} (${series.x.length} points)`;
   renderPlot(wrap, series, { targetPoints: 2000 });
   if(spinner) spinner.classList.add('hidden');
 }catch(e){ console.error(e); const info = document.getElementById('plotInfo'); if(info) info.textContent = 'No data'; }}
 
-function collapseToCurrent(name){ const rows = document.querySelectorAll('#logsBody tr'); rows.forEach(r=>{ r.style.display = (r.dataset.name===name) ? '' : 'none'; }); }
+function minimizeTableToCurrent(name){ const rows = document.querySelectorAll('#logsBody tr'); rows.forEach(r=>{ r.style.display = (r.dataset.name===name) ? '' : 'none'; }); }
+
+function showAllRows(){ const rows = document.querySelectorAll('#logsBody tr'); rows.forEach(r=>{ r.style.display = ''; }); }
 
 // helper to escape CSS attribute selector characters
 function cssEscape(s){ return s.replace(/(["\\])/g,'\\$1'); }
