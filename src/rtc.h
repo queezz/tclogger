@@ -14,4 +14,7 @@ String rtc_timestamp(const DateTime &dt);
 String rtc_datestamp(const DateTime &dt);
 float rtc_temp();
 
+// I2C mutex provided by main
+extern SemaphoreHandle_t I2C_MTX; // defined in main.cpp
+
 

@@ -5,7 +5,8 @@
 #include <algorithm>
 #include <FS.h>
 #include <LittleFS.h>
-#include "WebServer.h"
+#include "Webserver.h"
+#include "Network.h"
 #include "Thermocouple.h"
 #include "SdCard.h"
 #include "SpiDevices.h"
@@ -59,7 +60,8 @@ void handleClient()
   // --- API: /api/temp ---
   if (req.indexOf("GET /api/temp") >= 0)
   {
-    float temp = readTemperature();
+    double tavg = getCurrentAverage();
+    float temp = isnan(tavg) ? readTemperature() : (float)tavg;
     unsigned long ts = millis();
     String j = "{";
     j += "\"t\":" + String(temp, 2) + ",";
@@ -78,7 +80,7 @@ void handleClient()
   if (req.indexOf("GET /api/health") >= 0)
   {
     long rssi = WiFi.RSSI();
-    IPAddress ip = WiFi.localIP();
+    IPAddress ip = Network::ip();
     String j = "{";
     j += "\"rssi\":" + String(rssi) + ",";
     j += "\"ip\":\"" + String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]) + "\",";
@@ -125,21 +127,234 @@ void handleClient()
   // --- API: /api/start_log ---
   if (req.indexOf("/api/start_log") >= 0)
   {
+    // check for ?new=1 in the request line
+    bool wantNew = false;
+    int idxNew = req.indexOf("new=");
+    if (idxNew >= 0)
+    {
+      String v = req.substring(idxNew + 4);
+      int sp = v.indexOf(' ');
+      if (sp >= 0) v = v.substring(0, sp);
+      v.trim();
+      if (v == "1" || v == "true") wantNew = true;
+    }
+
+    // If wantNew, rotate unconditionally
+    if (wantNew)
+    {
+      startNewLogFile();
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
+
+    // Not requesting new file: if already logging, return current path; otherwise start new
+    if (isLogging())
+    {
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
+
+    // not logging: start new
     startNewLogFile();
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/plain");
-    client.println("Connection: close");
-    client.println();
-    client.println("OK");
+    {
+      String j = "{\"ok\":true,\"running\":true,\"log\":\"" + String(getLogFilename()) + "\"}";
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+      client.println(j);
+      client.stop();
+      return;
+    }
+  }
+
+  // --- Serve /explore (new Explore Data page) ---
+  if (req.indexOf("GET /explore ") == 0 || req.indexOf("GET /explore?") == 0 || req.indexOf("GET /explore.html") >= 0)
+  {
+    // Try to serve precompressed asset from LittleFS if present
+    String path = "/explore.html";
+    bool useGz = false;
+    String filePath = path;
+    if (LittleFS.exists(path + ".gz"))
+    {
+      filePath = path + ".gz";
+      useGz = true;
+    }
+    if (LittleFS.exists(filePath))
+    {
+      File f = LittleFS.open(filePath, "r");
+      if (f)
+      {
+        String ct = "text/html";
+        size_t len = f.size();
+
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: " + ct);
+        if (useGz) client.println("Content-Encoding: gzip");
+        client.println("Content-Length: " + String(len));
+        client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+        client.println("Connection: close");
+        client.println();
+
+        const size_t bufSize = 512;
+        uint8_t buffer[bufSize];
+        while (f.available())
+        {
+          size_t r = f.read(buffer, bufSize);
+          if (r > 0) client.write(buffer, r);
+        }
+        f.close();
+        client.stop();
+        return;
+      }
+    }
+
+    // Fallback: if file missing, redirect to main page
+    serveMainPage(client);
+    delay(1);
     client.stop();
     return;
   }
 
-  // --- Preview ---
+  // --- Preview (redirect to new Explore page) ---
   if (req.indexOf("GET /preview") >= 0)
   {
-    servePreview(client);
-    delay(1);
+    client.println("HTTP/1.1 302 Found");
+    client.println("Location: /explore");
+    client.println("Connection: close");
+    client.println();
+    client.stop();
+    return;
+  }
+
+  // --- API: /files.json ---
+  if (req.indexOf("GET /files.json") >= 0)
+  {
+    // Return a JSON array of CSV log files (name=basename, size, mtime)
+    deselectAllSPI();
+    digitalWrite(CS_SD, LOW);
+
+    auto appendDirCsv = [&](const char *dirPath, String &outJson, std::vector<String> &seen){
+      File dir = SD.open(dirPath);
+      if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return; }
+      File entry = dir.openNextFile();
+      while (entry)
+      {
+        if (!entry.isDirectory())
+        {
+          String full = entry.name();
+          if (full.endsWith(".csv"))
+          {
+            // basename
+            String base = full;
+            int slash = base.lastIndexOf('/');
+            if (slash >= 0 && slash < (int)base.length()-1) base = base.substring(slash+1);
+            bool dup = false;
+            for (const auto &s : seen) { if (s == base) { dup = true; break; } }
+            if (!dup)
+            {
+              seen.push_back(base);
+              size_t sz = entry.size();
+              outJson += "{\"name\":\"" + base + "\",\"size\":" + String(sz) + ",\"mtime\":0},";
+            }
+          }
+        }
+        entry.close();
+        entry = dir.openNextFile();
+      }
+      dir.close();
+    };
+
+    String j = "[";
+    std::vector<String> seen;
+    appendDirCsv("/logs", j, seen);
+    appendDirCsv("/", j, seen);
+
+    digitalWrite(CS_SD, HIGH);
+
+    if (j.endsWith(",")) j.remove(j.length()-1);
+    j += "]";
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+    client.println(j);
+    client.stop();
+    return;
+  }
+
+  // --- API: /logs/<filename> ---
+  if (req.indexOf("GET /logs/") >= 0)
+  {
+    // Extract filename (path between /logs/ and space)
+    int idx = req.indexOf("GET /logs/") + 10; // length of "GET /logs/"
+    int sp = req.indexOf(' ', idx);
+    if (sp < 0) sp = req.length();
+    String filename = req.substring(idx, sp);
+    filename.trim();
+
+    // Security checks
+    if (filename.length() == 0 || filename.indexOf("/") >= 0 || !filename.endsWith(".csv"))
+    {
+      client.println("HTTP/1.1 400 Bad Request");
+      client.println("Connection: close");
+      client.println();
+      client.println("Invalid filename.");
+      client.stop();
+      return;
+    }
+
+    String path = "/logs/" + filename;
+    deselectAllSPI();
+    digitalWrite(CS_SD, LOW);
+    File f = SD.open(path);
+    if (!f)
+    {
+      // Fallback to SD root for legacy files
+      path = "/" + filename;
+      f = SD.open(path);
+    }
+    if (!f || f.isDirectory())
+    {
+      client.println("HTTP/1.1 404 Not Found");
+      client.println("Connection: close");
+      client.println();
+      client.println("File not found.");
+      if (f) f.close();
+      digitalWrite(CS_SD, HIGH);
+      client.stop();
+      return;
+    }
+
+    size_t len = f.size();
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/csv");
+    client.println("Content-Length: " + String(len));
+    client.println("Connection: close");
+    client.println();
+
+    const size_t bufSize = 256;
+    uint8_t buffer[bufSize];
+    while (f.available())
+    {
+      size_t r = f.read(buffer, bufSize);
+      if (r > 0) client.write(buffer, r);
+    }
+    f.close();
+    digitalWrite(CS_SD, HIGH);
     client.stop();
     return;
   }
@@ -173,6 +388,15 @@ void handleClient()
   // GET / or GET /index.html
   if (req.indexOf("GET /") >= 0)
   {
+    // quick handle favicon requests to avoid LittleFS create attempts
+    if (req.indexOf("GET /favicon.ico") >= 0 || req.indexOf("GET /favicon.png") >= 0)
+    {
+      client.println("HTTP/1.1 204 No Content");
+      client.println("Connection: close");
+      client.println();
+      client.stop();
+      return;
+    }
     // extract path (very small parser)
     int s = req.indexOf(' ');
     int e = req.indexOf(' ', s + 1);
@@ -182,24 +406,57 @@ void handleClient()
       path = req.substring(s + 1, e);
     }
     if (path == "/") path = "/index.html";
-    // serve from LittleFS if exists
-    if (LittleFS.exists(path))
+    // strip query string if present (e.g., /plotter.html?file=...)
+    int q = path.indexOf('?');
+    if (q >= 0) {
+      path = path.substring(0, q);
+    }
+    // serve from LittleFS if exists (support precompressed .gz and Cache-Control)
+    String filePath = path;
+    bool useGz = false;
+    // prefer precompressed asset if present
+    if (LittleFS.exists(path + ".gz"))
     {
-      File f = LittleFS.open(path, "r");
+      filePath = path + ".gz";
+      useGz = true;
+    }
+    if (LittleFS.exists(filePath))
+    {
+      File f = LittleFS.open(filePath, "r");
       if (f)
       {
-        // simple content type
+        // determine content-type based on original path (without .gz)
+        String orig = path;
         String ct = "text/plain";
-        if (path.endsWith(".html")) ct = "text/html";
-        else if (path.endsWith(".js")) ct = "application/javascript";
-        else if (path.endsWith(".css")) ct = "text/css";
+        if (orig.endsWith(".html")) ct = "text/html";
+        else if (orig.endsWith(".js")) ct = "application/javascript";
+        else if (orig.endsWith(".css")) ct = "text/css";
+        else if (orig.endsWith(".svg")) ct = "image/svg+xml";
+        else if (orig.endsWith(".png")) ct = "image/png";
+        else if (orig.endsWith(".jpg") || orig.endsWith(".jpeg")) ct = "image/jpeg";
+
+        size_t len = f.size();
+
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: " + ct);
+        if (useGz) client.println("Content-Encoding: gzip");
+        client.println("Content-Length: " + String(len));
+
+        // Cache policy: short for HTML, long for static assets
+        if (orig.endsWith(".html") || orig == "/index.html")
+          client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+        else
+          client.println("Cache-Control: public, max-age=31536000, immutable");
+
         client.println("Connection: close");
         client.println();
+
+        const size_t bufSize = 512;
+        uint8_t buffer[bufSize];
         while (f.available())
         {
-          client.write(f.read());
+          size_t r = f.read(buffer, bufSize);
+          if (r > 0) client.write(buffer, r);
         }
         f.close();
         client.stop();
@@ -219,105 +476,74 @@ void handleClient()
   client.stop();
 }
 
+void Webserver_begin()
+{
+  setupWebServer();
+  Serial.printf("[WEB] %s server on http://%s/\n", Network::modeName().c_str(), Network::ip().toString().c_str());
+}
+
 // MARK: Main Page
 void serveMainPage(WiFiClient &client)
 {
-  float temp = readTemperature();
+  // Serve LittleFS /index.html (prefer precompressed .gz) if present
+  String path = "/index.html";
+  String filePath = path;
+  bool useGz = false;
+  if (LittleFS.exists(path + ".gz"))
+  {
+    filePath = path + ".gz";
+    useGz = true;
+  }
+  if (LittleFS.exists(filePath))
+  {
+    File f = LittleFS.open(filePath, "r");
+    if (f)
+    {
+      String ct = "text/html";
+      size_t len = f.size();
+
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: " + ct);
+      if (useGz) client.println("Content-Encoding: gzip");
+      client.println("Content-Length: " + String(len));
+      client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+      client.println("Connection: close");
+      client.println();
+
+      const size_t bufSize = 512;
+      uint8_t buffer[bufSize];
+      while (f.available())
+      {
+        size_t r = f.read(buffer, bufSize);
+        if (r > 0) client.write(buffer, r);
+      }
+      f.close();
+      return;
+    }
+  }
+
+  // Fallback: minimal text response if index.html missing
   client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
+  client.println("Content-Type: text/plain");
   client.println("Connection: close");
   client.println();
-
-  client.println("<!DOCTYPE html><html><head><title>ESP32 Temp</title></head><body>");
-  client.print("<h1>");
-  client.print(temp);
-  client.println(" &deg;C</h1>");
-  client.print("<p>Current Log File: <b>");
-  client.print(getLogFilename());
-  client.println("</b></p>");
-
-  client.println("<form action=\"/sampling\" method=\"get\">");
-  client.println("<label for=\"interval\">Sampling Interval:</label>");
-  client.println("<select name=\"interval\">");
-  client.println("<option value=\"0.1\">0.1 s</option><option value=\"0.5\">0.5 s</option><option value=\"1\">1 s</option><option value=\"10\">10 s</option><option value=\"30\">30 s</option>");
-  client.println("</select>");
-  client.println("<input type=\"submit\" value=\"Set\">");
-  client.println("</form>");
-
-  client.println("<form action=\"/newfile\" method=\"post\">");
-  client.println("<button type=\"submit\">Start New Log File</button>");
-  client.println("</form>");
-
-  client.println("<p><a href=\"/preview\">View Log Preview</a></p>");
-  client.println("</body></html>");
+  client.println("ESP32 Temp Logger\n\nPlease upload 'index.html' to LittleFS.");
 }
 
 // MARK: Preview
 void servePreview(WiFiClient &client)
 {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
+  // Redirect preview requests to the Explore page (served from LittleFS)
+  client.println("HTTP/1.1 302 Found");
+  client.println("Location: /explore");
   client.println("Connection: close");
   client.println();
-  client.println("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Download CSV</title>");
-  client.println("<style>:root{--bg:#0f1720;--card:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#4fd1c5} @media(prefers-color-scheme:light){:root{--bg:#f6f9fc;--card:#ffffff;--text:#06202b;--muted:#456275;--accent:#0ea5a4}} html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;background:var(--bg);color:var(--text)} .app{max-width:900px;margin:0 auto;padding:18px;box-sizing:border-box} header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px} h1{font-size:1rem;margin:0;color:var(--accent)} .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)} a{color:var(--accent);text-decoration:none} ul{margin:0;padding-left:18px} li{margin:8px 0} .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .btn{display:inline-block;background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0;padding:10px 12px;border-radius:8px;font-size:.95rem}</style></head><body>");
-  client.println("<div class=\"app\">");
-  client.println("<header><h1>ESP32 Temp Logger</h1><a class=\"btn\" href=\"/\">Back</a></header>");
-  client.println("<section class=\"card\">");
-  client.print("<div class=\"row\"><div>Current log: <b>");
-  client.print(getLogFilename());
-  client.println("</b></div></div>");
-  client.println("<h3 style=\"margin:12px 0 8px\">Download CSV</h3>");
-  client.println("<ul>");
-  listRecentLogs(client);
-  client.println("</ul>");
-  client.println("<p class=\"row\" style=\"margin-top:12px\"><span class=\"muted\">Tap a file to download.</span></p>");
-  client.println("</section>");
-  client.println("</div></body></html>");
 }
 
 // MARK: list Logs
 void listRecentLogs(WiFiClient &client)
 {
-  deselectAllSPI();
-  digitalWrite(CS_SD, LOW);
-
-  File root = SD.open("/");
-  if (!root || !root.isDirectory())
-  {
-    client.println("<li>Failed to open SD root.</li>");
-    return;
-  }
-
-  std::vector<String> filenames;
-  File entry = root.openNextFile();
-  while (entry)
-  {
-    if (!entry.isDirectory())
-    {
-      String name = entry.name();
-      if (name.endsWith(".csv"))
-      {
-        filenames.push_back(name);
-      }
-    }
-    entry.close();
-    entry = root.openNextFile();
-  }
-  digitalWrite(CS_SD, HIGH);
-
-  std::sort(filenames.begin(), filenames.end(), std::greater<String>());
-
-  // size_t count = filenames.size();
-  size_t count = std::min(filenames.size(), size_t(10));
-  for (size_t i = 0; i < count; ++i)
-  {
-    client.print("<li><a href=\"/download?file=");
-    client.print(filenames[i]);
-    client.print("\">");
-    client.print(filenames[i]);
-    client.println("</a></li>");
-  }
+  // NOTE: listing of logs is now handled client-side via /files.json and the Explore page.
 }
 
 // MARK: Download
