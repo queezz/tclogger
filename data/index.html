@@ -16,6 +16,24 @@
       .app{max-width:900px;margin:0 auto;padding:18px;box-sizing:border-box}
       header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
       h1{font-size:1rem;margin:0;color:var(--accent)}
+      /* tiny instrument-style nav */
+      .nav{display:flex;gap:10px;align-items:center;margin-left:8px}
+      .nav a{color:var(--accent);text-decoration:none;font-size:.95rem}
+      .nav a:hover{text-decoration:underline}
+      /* status LED */
+      .status{display:inline-flex;align-items:center;gap:8px}
+      .status-led{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+      .led-ok{background:#22c55e}
+      .led-connecting{background:#eab308;box-shadow:0 0 0 0 rgba(234,179,8,.7);animation:pulse 1.5s infinite}
+      .led-offline{background:#ef4444}
+      @keyframes pulse{to{box-shadow:0 0 0 10px rgba(234,179,8,0)}}
+      /* theme icon button */
+      .icon-btn{background:transparent;border:0;padding:6px 8px;border-radius:8px;font-size:1.05rem}
+      .icon-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+      /* plot toggle secondary */
+      .ghost{background:transparent;border:1px solid rgba(255,255,255,0.08);padding:8px 10px;border-radius:10px}
+      /* card spacing for status row */
+      .status-row{margin:10px 0;padding:10px;border-radius:10px}
       .controls{display:flex;gap:8px;flex-wrap:wrap}
       .card{background:var(--card);border-radius:14px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
       .main{display:grid;grid-template-columns:1fr;gap:12px}
@@ -77,12 +95,16 @@
   <body>
     <div class="app">
       <header>
-        <h1>ESP32 Temp Logger</h1>
+        <div style="display:flex;align-items:center;gap:12px">
+          <h1>ESP32 Temp Logger</h1>
+          <nav class="nav">
+            <a href="/index.html">Home</a>
+            <a href="/plotter.html">Plotter</a>
+            <a href="/explore.html">Explore Data</a>
+          </nav>
+        </div>
         <div class="controls">
-          <label class="toggle" title="Toggle dark/light mode">
-            <input id="themeToggle" type="checkbox" aria-label="Toggle theme" />
-            <span class="muted">Dark / Light</span>
-          </label>
+          <button id="themeBtn" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">☀️</button>
         </div>
       </header>
 
@@ -92,7 +114,7 @@
             <div class="temp-value" id="tempValue">--.-</div>
             <div class="temp-meta">
               <div id="logLine" class="log-line">log: —</div>
-              <div id="intervalLine" class="interval-line">interval: —</div>
+              <div id="intervalLine" class="interval-line">Sampling interval: —</div>
             </div>
           </div>
           <div class="actions">
@@ -111,12 +133,11 @@
           </div>
         </section>
 
-        <section class="card" id="controlsCard">
+        <section class="card status-row" id="controlsCard">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-            <div class="muted">Status: <span id="statusText">Connecting…</span></div>
+            <div class="muted status"><span id="statusLed" class="status-led led-connecting" aria-hidden="true"></span><span id="statusText">Connecting…</span></div>
             <div style="display:flex;gap:8px;align-items:center">
-              <label class="toggle"><input id="plotToggle" type="checkbox" /> <span>Show plot</span></label>
-              <a id="previewLink" class="link" href="#" target="_blank">Download CSV</a>
+              <button id="plotToggleBtn" class="ghost">Show Plot</button>
               <a id="plotterLink" class="link" href="/plotter.html" target="_blank">Open Plotter</a>
             </div>
           </div>
@@ -153,10 +174,12 @@
         setIntervalBtn: document.getElementById('setIntervalBtn'),
         startLogBtn: document.getElementById('startLogBtn'),
         previewLink: document.getElementById('previewLink'),
-        plotToggle: document.getElementById('plotToggle'),
+        plotToggleBtn: document.getElementById('plotToggleBtn'),
         chartCard: document.getElementById('chartCard'),
         chartCanvas: document.getElementById('chart'),
-        themeToggle: document.getElementById('themeToggle')
+        themeToggle: document.getElementById('themeToggle'),
+        themeBtn: document.getElementById('themeBtn'),
+        statusLed: document.getElementById('statusLed')
       };
 
       // Lightweight state
@@ -166,12 +189,28 @@
       let samples = []; const maxSamples = 240;
       let plotOn = false; let visible = !document.hidden;
 
-      // Theme handling
-      function applyTheme(isLight){
-        if(isLight) document.documentElement.style.colorScheme = 'light';
+      // Theme handling with localStorage + icon button
+      const THEME_KEY = 'ui.theme';
+      function applyTheme(mode){
+        if(mode === 'light') document.documentElement.style.colorScheme = 'light';
         else document.documentElement.style.colorScheme = 'dark';
+        // update icon
+        if(el.themeBtn) el.themeBtn.textContent = (mode === 'light') ? '☀️' : '🌙';
       }
-      el.themeToggle.addEventListener('change', e=> applyTheme(e.target.checked));
+      function initTheme(){
+        const saved = localStorage.getItem(THEME_KEY);
+        const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        const mode = saved || (prefersLight ? 'light' : 'dark');
+        applyTheme(mode);
+        if(el.themeBtn){
+          el.themeBtn.addEventListener('click', ()=>{
+            const next = (document.documentElement.style.colorScheme === 'light') ? 'dark' : 'light';
+            applyTheme(next);
+            localStorage.setItem(THEME_KEY, next);
+          });
+        }
+      }
+      initTheme();
 
       async function fetchJson(path, opts){
         try{ const r = await fetch(path, opts); if(!r.ok) throw new Error('http '+r.status); const t = await r.json(); return t }catch(e){ console.warn('fetch error',path,e); return null }
@@ -191,15 +230,20 @@
       async function pollStatus(){
         if(document.hidden) return;
         const data = await fetchJson(API.status);
-        if(!data){ el.statusText.textContent = 'Offline'; return }
+        if(!data){
+          el.statusText.textContent = 'Offline';
+          if(el.statusLed) el.statusLed.className = 'status-led led-offline';
+          return
+        }
         el.statusText.textContent = 'OK';
+        if(el.statusLed) el.statusLed.className = 'status-led led-ok';
         if(typeof data.temp !== 'undefined'){
           el.tempValue.textContent = Number(data.temp).toFixed(1);
         }
         const intervalSec = (data.interval_ms ? data.interval_ms/1000 : statusPollMs/1000);
         const logName = data.log || '-';
         el.logLine.textContent = 'log: ' + logName;
-        el.intervalLine.textContent = 'interval: ' + Number(intervalSec).toFixed(3) + 's';
+        el.intervalLine.textContent = 'Sampling interval: ' + Number(intervalSec).toFixed(3) + 's';
 
         // Keep UI polling independent of sampling interval; do not auto-adjust statusPollMs
         if(plotOn && visible) drawPlot();
@@ -283,11 +327,15 @@
         else { stopStatusPoll(); stopTempPoll(); }
       });
 
-      el.plotToggle.addEventListener('change', e=>{
-        plotOn = e.target.checked;
-        el.chartCard.classList.toggle('hidden', !plotOn);
-        if(plotOn && visible){ samples = []; startTempPoll(); drawPlot(); } else { stopTempPoll(); }
-      });
+      // plot toggle button (replaces checkbox)
+      if(el.plotToggleBtn){
+        el.plotToggleBtn.addEventListener('click', ()=>{
+          plotOn = !plotOn;
+          el.plotToggleBtn.textContent = plotOn ? 'Hide Plot' : 'Show Plot';
+          el.chartCard.classList.toggle('hidden', !plotOn);
+          if(plotOn && visible){ samples = []; startTempPoll(); drawPlot(); } else { stopTempPoll(); }
+        });
+      }
 
       el.setIntervalBtn.addEventListener('click', async ()=>{
         const v = Number(el.intervalSelect.value);
@@ -314,9 +362,11 @@
         setTimeout(()=>el.statusText.textContent = '',1600);
       });
 
-      el.previewLink.addEventListener('click', (ev)=>{
-        ev.preventDefault(); window.open(API.preview, '_blank');
-      });
+      if(el.previewLink){
+        el.previewLink.addEventListener('click', (ev)=>{
+          ev.preventDefault(); window.open(API.preview, '_blank');
+        });
+      }
 
       function init(){
         el.intervalSelect.value = '5';
