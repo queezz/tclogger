@@ -117,13 +117,22 @@
         if(len<1) return;
         // compute bounds for temperature
         const vs = plotTemp.slice(0,len).filter(v=>!isNaN(v)); if(vs.length===0) return;
-        const vmin = Math.min(...vs), vmax = Math.max(...vs); const pad = (vmax - vmin) * 0.08 || 1; const yMin = vmin - pad, yMax = vmax + pad;
+        const vmin = Math.min(...vs), vmax = Math.max(...vs);
+        // base data padding (fraction of range) to ensure some data margin
+        const basePad = Math.max((vmax - vmin) * 0.12, 0.5);
+        let yMin = vmin - basePad, yMax = vmax + basePad;
 
         // compute time bounds
         const tmin = Math.min(...decTime.slice(0,len)), tmax = Math.max(...decTime.slice(0,len)); const tpad = (tmax - tmin) * 0.02 || 1000;
 
         // draw axes (left margin 60 for y labels, bottom 40 for x labels)
-        const marginLeft = 60, marginRight = 16, marginTop = 12, marginBottom = 40;
+        // add extra pixel padding for Y so visual breathing room is visible regardless of data-range
+        const extraYPad = 24;
+        const marginLeft = 60, marginRight = 16, marginTop = 12 + extraYPad, marginBottom = 40 + extraYPad;
+
+        // convert pixel padding to data units so Y gap is visible even for small numeric ranges
+        const plotHeight = h - marginTop - marginBottom;
+        if(plotHeight > 0){ const dataPerPixel = (yMax - yMin) / Math.max(1, plotHeight); const pixelPad = extraYPad; const dataPadFromPixels = dataPerPixel * pixelPad; yMin -= dataPadFromPixels; yMax += dataPadFromPixels; }
         ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(marginLeft, marginTop); ctx.lineTo(marginLeft, h - marginBottom); ctx.lineTo(w - marginRight, h - marginBottom); ctx.stroke();
 
@@ -131,8 +140,8 @@
         ctx.fillStyle = 'rgba(230,238,246,0.95)'; ctx.font = '12px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         const yTicks = 5; for(let i=0;i<=yTicks;i++){ const v = yMin + (i / yTicks) * (yMax - yMin); const y = marginTop + ( (yMax - v) / (yMax - yMin) ) * (h - marginTop - marginBottom); ctx.beginPath(); ctx.moveTo(marginLeft - 6, y); ctx.lineTo(marginLeft, y); ctx.stroke(); ctx.fillText(v.toFixed(2), marginLeft - 10, y); }
 
-        // draw x ticks and labels (format time)
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; const xTicks = 6; for(let i=0;i<=xTicks;i++){ const t = tmin + (i / xTicks) * (tmax - tmin); const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); ctx.beginPath(); ctx.moveTo(x, h - marginBottom); ctx.lineTo(x, h - marginBottom + 6); ctx.stroke(); const dt = new Date(t); const label = dt.toLocaleString(); ctx.fillText(label, x, h - marginBottom + 8); }
+        // draw x ticks and labels (format time in 24-hour, no date)
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; const xTicks = 6; for(let i=0;i<=xTicks;i++){ const t = tmin + (i / xTicks) * (tmax - tmin); const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); ctx.beginPath(); ctx.moveTo(x, h - marginBottom); ctx.lineTo(x, h - marginBottom + 6); ctx.stroke(); const dt = new Date(t); const label = dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); ctx.fillText(label, x, h - marginBottom + 8); }
 
         // draw series
         ctx.strokeStyle = 'rgba(79,209,197,0.95)'; ctx.lineWidth = 2; ctx.beginPath();
@@ -140,8 +149,9 @@
         ctx.stroke();
 
         // axis labels
-        ctx.fillStyle = 'var(--muted)'; ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('Time', marginLeft + (w - marginLeft - marginRight)/2, h - 14);
-        ctx.save(); ctx.translate(14, marginTop + (h - marginTop - marginBottom)/2); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.fillText('Temperature', 0, 0); ctx.restore();
+        ctx.fillStyle = 'var(--muted)'; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+        ctx.fillText('Time', marginLeft + (w - marginLeft - marginRight)/2, h - Math.floor(marginBottom/2) + 6);
+        ctx.save(); ctx.translate(18, marginTop + Math.floor((h - marginTop - marginBottom)/2)); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.fillText('Temperature', 0, 0); ctx.restore();
       }
 
       el.loadBtn.addEventListener('click', loadSelected);
