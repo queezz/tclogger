@@ -181,7 +181,7 @@ void handleClient()
   }
 
   // --- Serve /explore (new Explore Data page) ---
-  if (req.indexOf("GET /explore") >= 0 || req.indexOf("GET /explore.html") >= 0)
+  if (req.indexOf("GET /explore ") == 0 || req.indexOf("GET /explore?") == 0 || req.indexOf("GET /explore.html") >= 0)
   {
     // Try to serve precompressed asset from LittleFS if present
     String path = "/explore.html";
@@ -406,6 +406,11 @@ void handleClient()
       path = req.substring(s + 1, e);
     }
     if (path == "/") path = "/index.html";
+    // strip query string if present (e.g., /plotter.html?file=...)
+    int q = path.indexOf('?');
+    if (q >= 0) {
+      path = path.substring(0, q);
+    }
     // serve from LittleFS if exists (support precompressed .gz and Cache-Control)
     String filePath = path;
     bool useGz = false;

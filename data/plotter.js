@@ -23,7 +23,7 @@ async function init(){ await populateFiles(); await refreshFiles(); bind(); awai
 async function populateFiles(){ const cached = await getFileListCached(); fillSelect(cached); }
 async function refreshFiles(){ try{ await refreshFileList({ page:1, pageSize:50 }); fillSelect((await getFileListCached())); }catch(e){} }
 
-function fillSelect(list){ if(!el.fileSelect) return; el.fileSelect.innerHTML=''; if(!list || list.length===0){ el.fileSelect.innerHTML='<option>No files</option>'; return; } list.forEach(f=>{ const o=document.createElement('option'); o.value=f.name; o.textContent=`${f.name} ${f.size? '('+Math.round(f.size/1024)+'KB)':''}`; el.fileSelect.appendChild(o); }); }
+function fillSelect(list){ if(!el.fileSelect) return; el.fileSelect.innerHTML=''; if(!list || list.length===0){ el.fileSelect.innerHTML='<option value="">No files</option>'; return; } list.forEach((f,i)=>{ const o=document.createElement('option'); o.value=f.name; o.textContent=`${f.name} ${f.size? '('+Math.round(f.size/1024)+'KB)':''}`; el.fileSelect.appendChild(o); }); }
 
 function bind(){ if(el.loadBtn) el.loadBtn.addEventListener('click', onLoad);
   if(el.savePng) el.savePng.addEventListener('click', onSavePng);
@@ -34,7 +34,8 @@ function bind(){ if(el.loadBtn) el.loadBtn.addEventListener('click', onLoad);
   el.rangeAll?.addEventListener('click', ()=>{ CURRENT.opts.t0=null; CURRENT.opts.t1=null; updatePlot(el.plot, CURRENT.opts); });
 }
 
-async function onLoad(){ const name = el.fileSelect?.value; if(!name) return; setInfo('Loading '+name+'…'); const { series } = await ensureSeries(name); CURRENT.series = series; renderPlot(el.plot, series, CURRENT.opts); setInfo(`Plotted ${series.x.length} points`); }
+async function onLoad(){ let name = el.fileSelect?.value; if(!name){ if(el.fileSelect && el.fileSelect.options.length>0){ name = el.fileSelect.options[0].value; el.fileSelect.value = name; } }
+  if(!name) return; setInfo('Loading '+name+'…'); const { series } = await ensureSeries(name); CURRENT.series = series; renderPlot(el.plot, series, CURRENT.opts); setInfo(`Plotted ${series.x.length} points`); }
 
 function onSavePng(){ const c = el.plot?.querySelector('canvas'); if(!c) return; const url = c.toDataURL('image/png'); const a=document.createElement('a'); a.href=url; a.download='plot.png'; a.click(); }
 
