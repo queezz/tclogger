@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Explore Data</title>
+  <style>
+    :root{
+      --bg:#0f1720; --card:#0b1220; --muted:#9aa6b2; --accent:#4fd1c5; --text:#e6eef3;
+      --radius:8px; --gap:12px; --pad:16px; --maxw:980px;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    .app{max-width:var(--maxw);margin:18px auto;padding:0 12px}
+    .nav{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+    .nav a{color:var(--muted);text-decoration:none;padding:8px;border-radius:6px}
+    .nav a[aria-current="page"],.nav a:hover{background:rgba(255,255,255,0.03);color:var(--text)}
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:var(--radius);padding:var(--pad);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .row{display:flex;align-items:center;gap:12px}
+    .muted{color:var(--muted)}
+
+    table.logs{width:100%;border-collapse:collapse;margin-top:12px}
+    table.logs thead th{text-align:left;padding:8px 6px;color:var(--muted);font-weight:600;font-size:13px}
+    table.logs tbody td{padding:8px 6px;border-top:1px solid rgba(255,255,255,0.03);vertical-align:middle}
+    table.logs tbody tr td.actions{display:flex;gap:8px;flex-wrap:wrap}
+    button, a.button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent);padding:6px 10px;border-radius:6px;text-decoration:none;cursor:pointer}
+    button[disabled], .disabled{opacity:0.35;cursor:default}
+
+    #pager{display:flex;gap:8px;align-items:center}
+
+    .hidden{display:none}
+    #canvasWrap{width:100%;height:300px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border-radius:6px;padding:8px}
+    #plotCanvas{width:100%;height:100%;display:block}
+
+    /* mobile tweaks */
+    @media (max-width:520px){
+      table.logs thead{display:none}
+      table.logs tbody td{display:block;padding:10px 0}
+      table.logs tbody td.actions{justify-content:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="nav">
+      <a href="/index.html">Home</a>
+      <a href="/plotter.html">Plotter</a>
+      <a href="/explore.html" aria-current="page">Explore Data</a>
+    </header>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h1 class="muted" style="margin:0">Recent Logs</h1>
+        <div id="pager" class="muted"></div>
+      </div>
+
+      <table class="logs" aria-describedby="pager">
+        <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+        <tbody id="logsBody"></tbody>
+      </table>
+    </section>
+
+    <section class="card hidden" id="inlinePlotCard" style="margin-top:12px">
+      <div class="row muted" id="plotInfo" style="margin-bottom:8px"></div>
+      <div id="canvasWrap"><canvas id="plotCanvas"></canvas></div>
+    </section>
+  </div>
+
+  <script>
+  const API_LIST = '/files.json'; // supports ?page=&page_size= if server does
+  const LOG_PREFIX = '/logs/';
+
+  let page=1, pageSize=10, total=0; let serverPaging=true;
+
+  async function fetchList(){
+    const url = `${API_LIST}?page=${page}&page_size=${pageSize}`;
+    try{
+      const r = await fetch(url);
+      if(!r.ok) throw new Error('Bad response');
+      const data = await r.json(); // {items, page, page_size, total}
+      if(!data.items || !('total' in data)){
+        // server doesn't support paging; fallback to client-side: load all
+        serverPaging=false;
+        await fetchListClient();
+        return;
+      }
+      total = data.total||0; page = data.page||page; pageSize = data.page_size||pageSize;
+      renderTable(data.items||[]);
+      renderPager();
+    }catch(e){
+      // fallback: try client-side single fetch
+      console.warn('Server paging failed, falling back to client-side', e);
+      serverPaging=false; await fetchListClient();
+    }
+  }
+
+  async function fetchListClient(){
+    // load full list once, then paginate in-memory
+    const r = await fetch(API_LIST);
+    const data = await r.json();
+    const items = data.items || data || [];
+    total = items.length || 0;
+    window.__explore_all = items.sort((a,b)=> (new Date(b.mtime||0)) - (new Date(a.mtime||0)) );
+    renderTable(window.__explore_all.slice((page-1)*pageSize, page*pageSize));
+    renderPager();
+  }
+
+  function renderTable(items){
+    const tb = document.getElementById('logsBody'); tb.innerHTML='';
+    items.forEach(f=>{
+      const tr = document.createElement('tr');
+      const name = (f.name||'').split('/').pop();
+      const sizeKB = Math.round((f.size||0)/1024);
+      const mtime = f.mtime? new Date(f.mtime).toLocaleString(): '-';
+      tr.innerHTML = `
+        <td data-label="Name">${name}</td>
+        <td data-label="Size">${sizeKB} KB</td>
+        <td data-label="Modified">${mtime}</td>
+        <td class="actions" data-label="Actions">
+          <button data-name="${escapeHtml(name)}" class="plot-here">Plot here</button>
+          <a class="button" href="${LOG_PREFIX}${encodeURIComponent(name)}" download>Download</a>
+          <a class="button" href="/plotter.html?file=${encodeURIComponent(name)}" target="_blank">Open in Plotter</a>
+        </td>`;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('.plot-here').forEach(btn=>{
+      btn.addEventListener('click', ()=> plotHere(btn.dataset.name));
+    });
+  }
+
+  function renderPager(){
+    const pager = document.getElementById('pager');
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    pager.innerHTML = `
+      <button ${page<=1?'disabled':''} id="prevBtn">« Prev</button>
+      <span>Page ${page} of ${pages}</span>
+      <button ${page>=pages?'disabled':''} id="nextBtn">Next »</button>`;
+    pager.querySelector('#prevBtn')?.addEventListener('click', ()=>{ if(page>1){ page--; if(serverPaging) fetchList(); else { renderTable(window.__explore_all.slice((page-1)*pageSize,page*pageSize)); renderPager(); } }});
+    pager.querySelector('#nextBtn')?.addEventListener('click', ()=>{ const pages=Math.ceil(total/pageSize); if(page<pages){ page++; if(serverPaging) fetchList(); else { renderTable(window.__explore_all.slice((page-1)*pageSize,page*pageSize)); renderPager(); } }});
+  }
+
+  // simple CSV parsing and plotting (minimal, mobile-friendly)
+  async function plotHere(name){
+    try{
+      const r = await fetch(LOG_PREFIX + name);
+      if(!r.ok) throw new Error('Failed to fetch log');
+      const txt = await r.text();
+      const rows = txt.split(/\r?\n/).filter(l=>l && !l.startsWith('#')).map(l=>l.split(','));
+      if(rows.length===0){ alert('No data to plot'); return; }
+      const times = rows.map((r,i)=>{ const first=r[0]; const asNum = Number(first); return isNaN(asNum)? (Date.parse(first)|| (i*1000)) : asNum; });
+      const vals = rows.map(r=> Number(r[1]));
+      drawInline(times, vals, name);
+    }catch(e){ console.error(e); alert('Unable to load file for plotting'); }
+  }
+
+  function drawInline(times, vals, name){
+    document.getElementById('inlinePlotCard').classList.remove('hidden');
+    document.getElementById('plotInfo').textContent = `Preview: ${name}`;
+    const c = document.getElementById('plotCanvas');
+    const ctx = c.getContext('2d'); const dpr = devicePixelRatio||1;
+    const styleW = c.clientWidth || c.parentElement.clientWidth || 800;
+    const styleH = c.clientHeight || 300;
+    c.width = styleW * dpr; c.height = styleH * dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    const w = styleW, h = styleH;
+    ctx.clearRect(0,0,w,h);
+    if(vals.length<2){ ctx.fillStyle='var(--muted)'; ctx.fillText('Not enough points', 20, 20); return; }
+
+    const ml=50,mr=12,mt=12,mb=36;
+    const xmin=Math.min(...times), xmax=Math.max(...times);
+    const ymin=Math.min(...vals), ymax=Math.max(...vals);
+    const pad=(ymax-ymin||1)*0.12; const y0=ymin-pad, y1=ymax+pad;
+
+    // axes
+    ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=1; ctx.beginPath();
+    ctx.moveTo(ml,mt); ctx.lineTo(ml,h-mb); ctx.lineTo(w-mr,h-mb); ctx.stroke();
+
+    // grid horizontal lines
+    ctx.strokeStyle='rgba(255,255,255,0.02)'; for(let i=0;i<=4;i++){ const y = mt + i*(h-mt-mb)/4; ctx.beginPath(); ctx.moveTo(ml,y); ctx.lineTo(w-mr,y); ctx.stroke(); }
+
+    // line
+    ctx.strokeStyle='rgba(79,209,197,0.98)'; ctx.lineWidth=2; ctx.beginPath();
+    for(let i=0;i<vals.length;i++){
+      const x = ml + ((times[i]-xmin)/(xmax-xmin||1))*(w-ml-mr);
+      const y = mt + ((y1-vals[i])/(y1-y0||1))*(h-mt-mb);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // simple axes labels
+    ctx.fillStyle='var(--muted)'; ctx.font='12px sans-serif';
+    ctx.fillText(formatTimeLabel(xmin), ml, h-8); ctx.fillText(formatTimeLabel(xmax), w-120, h-8);
+  }
+
+  function formatTimeLabel(v){ try{ return new Date(Number(v)).toLocaleString(); }catch(e){ return String(v); } }
+
+  function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+
+  // kick off
+  fetchList();
+  </script>
+</body>
+</html>

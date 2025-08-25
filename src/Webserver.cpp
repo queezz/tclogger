@@ -180,11 +180,61 @@ void handleClient()
     }
   }
 
-  // --- Preview ---
+  // --- Serve /explore (new Explore Data page) ---
+  if (req.indexOf("GET /explore") >= 0 || req.indexOf("GET /explore.html") >= 0)
+  {
+    // Try to serve precompressed asset from LittleFS if present
+    String path = "/explore.html";
+    bool useGz = false;
+    String filePath = path;
+    if (LittleFS.exists(path + ".gz"))
+    {
+      filePath = path + ".gz";
+      useGz = true;
+    }
+    if (LittleFS.exists(filePath))
+    {
+      File f = LittleFS.open(filePath, "r");
+      if (f)
+      {
+        String ct = "text/html";
+        size_t len = f.size();
+
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: " + ct);
+        if (useGz) client.println("Content-Encoding: gzip");
+        client.println("Content-Length: " + String(len));
+        client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+        client.println("Connection: close");
+        client.println();
+
+        const size_t bufSize = 512;
+        uint8_t buffer[bufSize];
+        while (f.available())
+        {
+          size_t r = f.read(buffer, bufSize);
+          if (r > 0) client.write(buffer, r);
+        }
+        f.close();
+        client.stop();
+        return;
+      }
+    }
+
+    // Fallback: if file missing, redirect to main page
+    serveMainPage(client);
+    delay(1);
+    client.stop();
+    return;
+  }
+
+  // --- Preview (redirect to new Explore page) ---
   if (req.indexOf("GET /preview") >= 0)
   {
-    servePreview(client);
-    delay(1);
+    client.println("HTTP/1.1 302 Found");
+    client.println("Location: /explore");
+    client.println("Connection: close");
+    client.println();
     client.stop();
     return;
   }

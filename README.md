@@ -12,4 +12,5 @@ for k-type thermocouple
 ```bash
 gzip -k -9 data/index.html
 gzip -k -9 data/plotter.html
+gzip -k -9 data/explore.html
 ```
