@@ -11,6 +11,9 @@
       .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px}
       .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
       select,input,button{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text);padding:8px;border-radius:8px}
+      /* dark-themed select popup where supported */
+      select, select option { background: var(--card); color: var(--text); }
+      select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right:28px }
       button.primary{background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0}
       #canvasWrap{width:100%;height:360px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);overflow:hidden}
       canvas{width:100%;height:100%;display:block}
@@ -35,10 +38,7 @@
           <input id="avgWindow" type="number" value="1" min="1" style="width:80px" />
           <button id="savePng">Save PNG</button>
         </div>
-        <div class="row" style="margin-top:8px">
-          <label class="muted">Column:</label>
-          <select id="colSelect"></select>
-        </div>
+        <!-- single fixed columns: time, temperature -->
       </section>
 
       <section class="card" id="chartCard">
@@ -57,27 +57,38 @@
         loadBtn: document.getElementById('loadBtn'),
         decimate: document.getElementById('decimate'),
         avgWindow: document.getElementById('avgWindow'),
-        colSelect: document.getElementById('colSelect'),
         info: document.getElementById('info'),
         savePng: document.getElementById('savePng'),
         canvas: document.getElementById('chart')
       };
 
+      // raw rows plus derived series arrays
       let data = []; let headers = [];
+      let timeSeries = []; // milliseconds since epoch or index fallback
+      let tempSeries = [];
 
       async function fetchJson(path){ try{ const r = await fetch(path); if(!r.ok) throw new Error(r.status); return await r.json(); }catch(e){return null} }
 
       function setInfo(t){ el.info.textContent = t }
 
-      async function loadFiles(){ setInfo('Loading file list…'); const list = await fetchJson(API_FILES); el.fileSelect.innerHTML = ''; if(!list || !Array.isArray(list) || list.length===0){ el.fileSelect.innerHTML = '<option>No files</option>'; setInfo('No CSV files found'); return; } list.forEach(f=>{ const base = (f && f.name) ? String(f.name).split('/').pop() : ''; if(!base) return; const o=document.createElement('option'); o.value=base; o.textContent = base + (f.size? (' (' + Math.round(f.size/1024) + 'KB)') : ''); el.fileSelect.appendChild(o); }); setInfo('Select a file'); }
+      async function loadFiles(){ setInfo('Loading file list…'); const list = await fetchJson(API_FILES); el.fileSelect.innerHTML = ''; if(!list || !Array.isArray(list) || list.length===0){ el.fileSelect.innerHTML = '<option>No files</option>'; setInfo('No CSV files found'); return; }
+        // sort by name descending to show newer files first if names contain timestamps
+        list.sort((a,b)=>{ if(!a || !b) return 0; const na = String(a.name).toLowerCase(); const nb = String(b.name).toLowerCase(); return nb.localeCompare(na); });
+        list.forEach(f=>{ const base = (f && f.name) ? String(f.name).split('/').pop() : ''; if(!base) return; const o=document.createElement('option'); o.value=base; o.textContent = base + (f.size? (' (' + Math.round(f.size/1024) + 'KB)') : ''); el.fileSelect.appendChild(o); }); setInfo('Select a file'); }
 
-      async function loadSelected(){ const name = el.fileSelect.value; if(!name) return; setInfo('Fetching ' + name + '…'); data = []; headers = []; try{ const r = await fetch(API_LOG_PREFIX + name); if(!r.ok) throw new Error('http '+r.status); const txt = await r.text(); parseCSV(txt); setInfo('Parsed ' + data.length + ' rows'); populateColumns(); draw(); }catch(e){ setInfo('Error: ' + e.message); } }
+      async function loadSelected(){ const name = el.fileSelect.value; if(!name) return; setInfo('Fetching ' + name + '…'); data = []; headers = []; timeSeries = []; tempSeries = []; try{ const r = await fetch(API_LOG_PREFIX + name); if(!r.ok) throw new Error('http '+r.status); const txt = await r.text(); parseCSV(txt); setInfo('Parsed ' + data.length + ' rows'); draw(); }catch(e){ setInfo('Error: ' + e.message); } }
 
       function parseCSV(text){ const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0 && !l.startsWith('#')); if(lines.length===0) return; // detect header
         const first = lines[0].split(',').map(s=>s.trim()); let hasHeader = first.every(c=>isNaN(Number(c))); if(hasHeader){ headers = first; lines.shift(); } else { headers = first.map((_,i)=>'col'+i); }
-        data = lines.map(line=> line.split(',').map(v=>{ const n = Number(v); return isNaN(n) ? v : n; })); }
-
-      function populateColumns(){ el.colSelect.innerHTML=''; headers.forEach((h,idx)=>{ const o=document.createElement('option'); o.value=idx; o.textContent = h; el.colSelect.appendChild(o); }); }
+        // parse rows into arrays
+        data = lines.map(line=> line.split(',').map(v=>{ const n = Number(v); return isNaN(n) ? v : n; }));
+        // derive time and temperature series (assume first column = time, second = temperature)
+        timeSeries = data.map((r,idx)=>{
+          const t = r[0]; if(typeof t === 'number') return t; const parsed = Date.parse(String(t)); if(!isNaN(parsed)) return parsed; // fallback to index (ms)
+          return idx * 1000;
+        });
+        tempSeries = data.map(r=>{ const v = Number(r[1]); return isNaN(v) ? NaN : v; });
+      }
 
       // Simple drawing with pan/zoom
       const c = el.canvas; const ctx = c.getContext('2d'); let dpr = window.devicePixelRatio || 1;
@@ -98,16 +109,39 @@
 
       function draw(){ if(!data || data.length===0) { resizeCanvas(); ctx.clearRect(0,0,c.clientWidth,c.clientHeight); return; }
         resizeCanvas(); const w=c.clientWidth, h=c.clientHeight; ctx.clearRect(0,0,w,h);
-        const col = Number(el.colSelect.value || 0); const dec = Math.max(1, Number(el.decimate.value)||1); const avg = Math.max(1, Number(el.avgWindow.value)||1);
-        const series = data.map(r=> Number(r[col]) ); const decSeries = decimateArray(series, dec); const plotSeries = rollingAverage(decSeries, avg);
-        // compute bounds
-        const vmin = Math.min(...plotSeries), vmax = Math.max(...plotSeries); const pad = (vmax - vmin) * 0.08 || 1; const yMin = vmin - pad, yMax = vmax + pad;
-        // draw axes
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40,8); ctx.lineTo(40,h-24); ctx.lineTo(w-8,h-24); ctx.stroke();
+        const dec = Math.max(1, Number(el.decimate.value)||1); const avg = Math.max(1, Number(el.avgWindow.value)||1);
+        // apply decimation and averaging to temperature while keeping time aligned
+        const decTime = decimateArray(timeSeries, dec); const decTemp = decimateArray(tempSeries, dec);
+        const plotTemp = rollingAverage(decTemp, avg);
+        const len = Math.min(decTime.length, plotTemp.length);
+        if(len<1) return;
+        // compute bounds for temperature
+        const vs = plotTemp.slice(0,len).filter(v=>!isNaN(v)); if(vs.length===0) return;
+        const vmin = Math.min(...vs), vmax = Math.max(...vs); const pad = (vmax - vmin) * 0.08 || 1; const yMin = vmin - pad, yMax = vmax + pad;
+
+        // compute time bounds
+        const tmin = Math.min(...decTime.slice(0,len)), tmax = Math.max(...decTime.slice(0,len)); const tpad = (tmax - tmin) * 0.02 || 1000;
+
+        // draw axes (left margin 60 for y labels, bottom 40 for x labels)
+        const marginLeft = 60, marginRight = 16, marginTop = 12, marginBottom = 40;
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(marginLeft, marginTop); ctx.lineTo(marginLeft, h - marginBottom); ctx.lineTo(w - marginRight, h - marginBottom); ctx.stroke();
+
+        // draw y ticks and labels (bright for dark mode)
+        ctx.fillStyle = 'rgba(230,238,246,0.95)'; ctx.font = '12px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        const yTicks = 5; for(let i=0;i<=yTicks;i++){ const v = yMin + (i / yTicks) * (yMax - yMin); const y = marginTop + ( (yMax - v) / (yMax - yMin) ) * (h - marginTop - marginBottom); ctx.beginPath(); ctx.moveTo(marginLeft - 6, y); ctx.lineTo(marginLeft, y); ctx.stroke(); ctx.fillText(v.toFixed(2), marginLeft - 10, y); }
+
+        // draw x ticks and labels (format time)
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; const xTicks = 6; for(let i=0;i<=xTicks;i++){ const t = tmin + (i / xTicks) * (tmax - tmin); const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); ctx.beginPath(); ctx.moveTo(x, h - marginBottom); ctx.lineTo(x, h - marginBottom + 6); ctx.stroke(); const dt = new Date(t); const label = dt.toLocaleString(); ctx.fillText(label, x, h - marginBottom + 8); }
+
         // draw series
         ctx.strokeStyle = 'rgba(79,209,197,0.95)'; ctx.lineWidth = 2; ctx.beginPath();
-        const len = plotSeries.length; if(len<1) return; for(let i=0;i<len;i++){ const x = 40 + ((i - offset) * ( (w-56) / Math.max(1, len-1) )) * scale; const y = 8 + ( (yMax - plotSeries[i]) / (yMax - yMin) ) * (h-32); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+        for(let i=0;i<len;i++){ const t = decTime[i]; const val = plotTemp[i]; const x = marginLeft + ( (t - tmin) / (tmax - tmin) ) * (w - marginLeft - marginRight); const y = marginTop + ( (yMax - val) / (yMax - yMin) ) * (h - marginTop - marginBottom); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
         ctx.stroke();
+
+        // axis labels
+        ctx.fillStyle = 'var(--muted)'; ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('Time', marginLeft + (w - marginLeft - marginRight)/2, h - 14);
+        ctx.save(); ctx.translate(14, marginTop + (h - marginTop - marginBottom)/2); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.fillText('Temperature', 0, 0); ctx.restore();
       }
 
       el.loadBtn.addEventListener('click', loadSelected);
