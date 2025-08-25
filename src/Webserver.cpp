@@ -480,102 +480,65 @@ void Webserver_begin()
 // MARK: Main Page
 void serveMainPage(WiFiClient &client)
 {
-  float temp = readTemperature();
+  // Serve LittleFS /index.html (prefer precompressed .gz) if present
+  String path = "/index.html";
+  String filePath = path;
+  bool useGz = false;
+  if (LittleFS.exists(path + ".gz"))
+  {
+    filePath = path + ".gz";
+    useGz = true;
+  }
+  if (LittleFS.exists(filePath))
+  {
+    File f = LittleFS.open(filePath, "r");
+    if (f)
+    {
+      String ct = "text/html";
+      size_t len = f.size();
+
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: " + ct);
+      if (useGz) client.println("Content-Encoding: gzip");
+      client.println("Content-Length: " + String(len));
+      client.println("Cache-Control: no-cache, must-revalidate, max-age=0");
+      client.println("Connection: close");
+      client.println();
+
+      const size_t bufSize = 512;
+      uint8_t buffer[bufSize];
+      while (f.available())
+      {
+        size_t r = f.read(buffer, bufSize);
+        if (r > 0) client.write(buffer, r);
+      }
+      f.close();
+      return;
+    }
+  }
+
+  // Fallback: minimal text response if index.html missing
   client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
+  client.println("Content-Type: text/plain");
   client.println("Connection: close");
   client.println();
-
-  client.println("<!DOCTYPE html><html><head><title>ESP32 Temp</title></head><body>");
-  client.print("<h1>");
-  client.print(temp);
-  client.println(" &deg;C</h1>");
-  client.print("<p>Current Log File: <b>");
-  client.print(getLogFilename());
-  client.println("</b></p>");
-
-  client.println("<form action=\"/sampling\" method=\"get\">");
-  client.println("<label for=\"interval\">Sampling Interval:</label>");
-  client.println("<select name=\"interval\">");
-  client.println("<option value=\"0.1\">0.1 s</option><option value=\"0.5\">0.5 s</option><option value=\"1\">1 s</option><option value=\"10\">10 s</option><option value=\"30\">30 s</option>");
-  client.println("</select>");
-  client.println("<input type=\"submit\" value=\"Set\">");
-  client.println("</form>");
-
-  client.println("<form action=\"/newfile\" method=\"post\">");
-  client.println("<button type=\"submit\">Start New Log File</button>");
-  client.println("</form>");
-
-  client.println("<p><a href=\"/preview\">View Log Preview</a></p>");
-  client.println("</body></html>");
+  client.println("ESP32 Temp Logger\n\nPlease upload 'index.html' to LittleFS.");
 }
 
 // MARK: Preview
 void servePreview(WiFiClient &client)
 {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
+  // Redirect preview requests to the Explore page (served from LittleFS)
+  client.println("HTTP/1.1 302 Found");
+  client.println("Location: /explore");
   client.println("Connection: close");
   client.println();
-  client.println("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Download CSV</title>");
-  client.println("<style>:root{--bg:#0f1720;--card:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#4fd1c5} @media(prefers-color-scheme:light){:root{--bg:#f6f9fc;--card:#ffffff;--text:#06202b;--muted:#456275;--accent:#0ea5a4}} html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;background:var(--bg);color:var(--text)} .app{max-width:900px;margin:0 auto;padding:18px;box-sizing:border-box} header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px} h1{font-size:1rem;margin:0;color:var(--accent)} .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)} a{color:var(--accent);text-decoration:none} ul{margin:0;padding-left:18px} li{margin:8px 0} .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .btn{display:inline-block;background:linear-gradient(90deg,var(--accent),#7af0e6);color:#022029;border:0;padding:10px 12px;border-radius:8px;font-size:.95rem} .nav{display:flex;gap:10px;align-items:center;margin-left:8px} .nav a{color:var(--accent);text-decoration:none;font-size:.95rem} .nav a:hover{text-decoration:underline}</style></head><body>");
-  client.println("<div class=\"app\">");
-  client.println("<header><div style=\"display:flex;align-items:center;gap:12px\"><h1>ESP32 Temp Logger</h1><nav class=\"nav\"><a href=\"/index.html\">Home</a><a href=\"/plotter.html\">Plotter</a><a href=\"/preview\">Explore Data</a></nav></div><a class=\"btn\" href=\"/\">Back</a></header>");
-  client.println("<section class=\"card\">");
-  client.print("<div class=\"row\"><div>Current log: <b>");
-  client.print(getLogFilename());
-  client.println("</b></div></div>");
-  client.println("<h3 style=\"margin:12px 0 8px\">Download CSV</h3>");
-  client.println("<ul>");
-  listRecentLogs(client);
-  client.println("</ul>");
-  client.println("<p class=\"row\" style=\"margin-top:12px\"><span class=\"muted\">Tap a file to download.</span></p>");
-  client.println("</section>");
-  client.println("</div></body></html>");
 }
 
 // MARK: list Logs
 void listRecentLogs(WiFiClient &client)
 {
-  deselectAllSPI();
-  digitalWrite(CS_SD, LOW);
-
-  File root = SD.open("/");
-  if (!root || !root.isDirectory())
-  {
-    client.println("<li>Failed to open SD root.</li>");
-    return;
-  }
-
-  std::vector<String> filenames;
-  File entry = root.openNextFile();
-  while (entry)
-  {
-    if (!entry.isDirectory())
-    {
-      String name = entry.name();
-      if (name.endsWith(".csv"))
-      {
-        filenames.push_back(name);
-      }
-    }
-    entry.close();
-    entry = root.openNextFile();
-  }
-  digitalWrite(CS_SD, HIGH);
-
-  std::sort(filenames.begin(), filenames.end(), std::greater<String>());
-
-  // size_t count = filenames.size();
-  size_t count = std::min(filenames.size(), size_t(10));
-  for (size_t i = 0; i < count; ++i)
-  {
-    client.print("<li><a href=\"/download?file=");
-    client.print(filenames[i]);
-    client.print("\">");
-    client.print(filenames[i]);
-    client.println("</a></li>");
-  }
+  // NOTE: listing of logs is now handled client-side via /files.json and the Explore page.
 }
 
 // MARK: Download
