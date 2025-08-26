@@ -2,8 +2,6 @@
 #include <WiFi.h>
 #include "Secrets.h"
 
-static Network::Mode g_mode = Network::Mode::None;
-
 namespace {
 bool trySTA(uint32_t timeout_ms) {
   WiFi.mode(WIFI_STA);
@@ -15,7 +13,8 @@ bool trySTA(uint32_t timeout_ms) {
   return WiFi.status() == WL_CONNECTED;
 }
 
-void startAP() {
+// helper to start the soft AP (kept in anonymous namespace)
+void startAP_impl() {
   WiFi.mode(WIFI_AP);
   // Ensure a known AP IP (default 192.168.4.1) and netmask
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
@@ -24,42 +23,62 @@ void startAP() {
 }
 } // namespace
 
-void Network::begin(uint32_t connect_timeout_ms) {
+namespace Network {
+
+static Mode g_mode = Mode::None;
+
+void startAccessPoint()
+{
+  // If already in AP mode, nothing to do
+  if (g_mode == Mode::AP) return;
+
+  Serial.println("[NET] Switching to AP mode...");
+  // Ensure we disconnect from STA and don't persist credentials/mode
+  if (WiFi.getMode() != WIFI_OFF) WiFi.disconnect(true, true);
+  WiFi.persistent(false);
+  startAP_impl();
+  g_mode = Mode::AP;
+  Serial.printf("[NET] AP %s started: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+}
+
+void begin(uint32_t connect_timeout_ms) {
   if (WiFi.getMode() != WIFI_OFF) WiFi.disconnect(true, true);
   // Avoid writing WiFi credentials/mode to NVS during mode switches
   WiFi.persistent(false);
-  g_mode = Network::Mode::None;
+  g_mode = Mode::None;
 
   Serial.println("[NET] Connecting STA...");
   if (trySTA(connect_timeout_ms)) {
-    g_mode = Network::Mode::STA;
+    g_mode = Mode::STA;
     Serial.printf("[NET] STA OK: %s\n", WiFi.localIP().toString().c_str());
   } else {
     Serial.println("[NET] STA failed, starting AP...");
-    startAP();
-    g_mode = Network::Mode::AP;
+    startAP_impl();
+    g_mode = Mode::AP;
     Serial.printf("[NET] AP %s started: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
   }
 }
 
-bool Network::isConnected() {
+bool isConnected() {
   if (g_mode == Mode::STA) return WiFi.status() == WL_CONNECTED;
   if (g_mode == Mode::AP)  return WiFi.softAPgetStationNum() > 0;
   return false;
 }
 
-Network::Mode Network::mode() { return g_mode; }
+Mode mode() { return g_mode; }
 
-IPAddress Network::ip() {
+IPAddress ip() {
   if (g_mode == Mode::STA) return WiFi.localIP();
   if (g_mode == Mode::AP)  return WiFi.softAPIP();
   return INADDR_NONE;
 }
 
-String Network::modeName() {
+String modeName() {
   switch (g_mode) {
     case Mode::STA: return "STA";
     case Mode::AP:  return "AP";
     default:        return "None";
   }
 }
+
+} // namespace Network

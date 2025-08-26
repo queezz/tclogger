@@ -6,6 +6,7 @@ namespace Network {
 enum class Mode { None, STA, AP };
 
 void begin(uint32_t connect_timeout_ms = 12000);
+void startAccessPoint();
 bool isConnected();
 Mode mode();
 IPAddress ip();

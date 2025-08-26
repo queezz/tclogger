@@ -90,6 +90,21 @@ void loop()
   if (isnan(displayVal)) displayVal = temperature;
   showStatusDisplay(displayVal, status, sdstatus);
   handleClient();
+  // If we're supposed to be in STA mode but lost connection, start AP
+  if (Network::mode() == Network::Mode::STA && WiFi.status() != WL_CONNECTED)
+  {
+    // Give a small grace period before switching: try reconnecting briefly
+    static unsigned long lastNetCheck = 0;
+    unsigned long nowMs = millis();
+    if (nowMs - lastNetCheck > 5000)
+    {
+      lastNetCheck = nowMs;
+      Serial.println("[MAIN] STA lost connection — starting AP...");
+      Network::startAccessPoint();
+      // Reinitialize webserver so it binds to AP interface
+      Webserver_begin();
+    }
+  }
   delay(std::min(500ul, getSamplingInterval()));
 
 }
