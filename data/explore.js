@@ -15,7 +15,15 @@ async function init(){
 }
 
 // Use actual cached list length for paging to avoid phantom empty pages
-async function renderFromCache(){ const list = await getFileListCached(); total = list.length; renderTable(list.slice((page-1)*pageSize, page*pageSize)); renderPager(); }
+async function renderFromCache(){
+  const list = await getFileListCached();
+  total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if(page > totalPages) page = totalPages; if(page < 1) page = 1;
+  const start = (page - 1) * pageSize; const end = start + pageSize;
+  renderTable(list.slice(start, end));
+  renderPager(totalPages);
+}
 
 function renderTable(items){ const tb = document.getElementById('logsBody'); if(!tb) return; tb.innerHTML=''; items.forEach(f=>{ const tr=document.createElement('tr'); const name=String(f.name||''); const sizeKB=Math.round((f.size||0)/1024);
   tr.dataset.name = name;
@@ -31,7 +39,7 @@ function renderTable(items){ const tb = document.getElementById('logsBody'); if(
   tb.querySelectorAll('button.dl').forEach(btn=> btn.addEventListener('click', async ()=>{ await onDownload(btn.dataset.name); }));
 }
 
-function renderPager(){ const pager = document.getElementById('pager'); const pages = Math.max(1, Math.ceil(total / pageSize)); pager.innerHTML = `
+function renderPager(pages){ const pager = document.getElementById('pager'); pages ||= Math.max(1, Math.ceil(total / pageSize)); pager.innerHTML = `
   <button ${page<=1?'disabled':''} id="prevBtn">« Prev</button>
   <span>Page ${page} of ${pages}</span>
   <button ${page>=pages?'disabled':''} id="nextBtn">Next »</button>`;

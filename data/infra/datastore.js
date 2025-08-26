@@ -1,12 +1,12 @@
-import { fetchFileList, fetchFileBlob } from './api.js';
+import { fetchFileList, fetchFileBlob, fetchAllFiles } from './api.js';
 import { getAllFiles, putFileMeta, getBlob, putBlob, getSeries, putSeries } from './cache.js';
 
 let worker;
 function getWorker(){ if(!worker){ const url = new URL('./parser.worker.js', import.meta.url); worker = new Worker(url, { type: 'module' }); } return worker; }
 
-export async function getFileListCached(){ const list = await getAllFiles(); return list.sort((a,b)=> (b.lastModified??0)-(a.lastModified??0) || String(b.name).localeCompare(String(a.name))); }
+export async function getFileListCached(){ const list = await getAllFiles(); return [...list].sort((a,b)=> (b.lastModified??0)-(a.lastModified??0) || String(b.name).localeCompare(String(a.name))); }
 
-export async function refreshFileList(paging){ const remote = await fetchFileList(paging); for(const m of remote.files){ await putFileMeta(m); } return remote; }
+export async function refreshFileList(_paging){ const files = await fetchAllFiles(); for(const m of files){ await putFileMeta(m); } return { total: files.length }; }
 
 export async function ensureSeries(name){ const cached = await getSeries(name); if(cached) return { series: cached.series, meta: cached.meta, fromCache: true };
   let blob = await getBlob(name); if(!blob){ blob = await fetchFileBlob(name); await putBlob(name, blob); }
