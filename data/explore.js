@@ -21,7 +21,23 @@ async function renderFromCache(){
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if(page > totalPages) page = totalPages; if(page < 1) page = 1;
   const start = (page - 1) * pageSize; const end = start + pageSize;
-  renderTable(list.slice(start, end));
+  const pageRows = list.slice(start, end);
+  renderTable(pageRows);
+  // Maintain minimize/show button state in sync with rendered rows.
+  if(tableMinimized){
+    const exists = !!document.querySelector(`#logsBody tr[data-name="${cssEscape(currentName)}"]`);
+    if(exists){
+      // Keep table minimized to the current item and ensure button label reflects that
+      minimizeTableToCurrent(currentName);
+      const btn = document.getElementById('showAllBtn'); if(btn) btn.textContent = 'Show all files';
+    } else {
+      // Current item not on this page: reset minimized state and update label
+      tableMinimized = false;
+      const btn = document.getElementById('showAllBtn'); if(btn) btn.textContent = 'Minimize table';
+    }
+  } else {
+    const btn = document.getElementById('showAllBtn'); if(btn) btn.textContent = 'Minimize table';
+  }
   renderPager(totalPages);
 }
 
